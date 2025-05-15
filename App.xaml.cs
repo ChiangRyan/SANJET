@@ -7,7 +7,6 @@ using SANJET.UI.Views.Pages;
 using SANJET.SANJET.Core.ViewModels;
 using SANJET.SANJET.Core.Interfaces;
 using SANJET.SANJET.Core.Tools;
-using SANJET.SANJET.Core.Models;
 using SANJET.UI.Views.Windows;
 
 
@@ -133,6 +132,7 @@ namespace SANJET
             services.AddSingleton<ITextToSpeechService, SpeechService>();
             // Add AudioPlayer service registration
             services.AddSingleton<IAudioPlayerService, AudioPlayer>();
+
             services.AddSingleton<MainWindow>(provider =>
                 new MainWindow(provider.GetService<IServiceProvider>()));
 

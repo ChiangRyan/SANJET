@@ -1,4 +1,5 @@
-﻿namespace SANJET.Core.Enums
+﻿
+namespace SANJET.Core.Constants.Enums
 {
     public enum Permission
     {
