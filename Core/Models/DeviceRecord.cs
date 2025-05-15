@@ -1,5 +1,5 @@
 ﻿
-namespace SANJET.SANJET.Core.Models
+namespace SANJET.Core.Models
 {
     public class DeviceRecord
     {

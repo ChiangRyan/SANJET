@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization; // 引入此命名空間以使用 JsonPropertyName
 
-namespace SANJET.SANJET.Core.Models
+namespace SANJET.Core.Models
 {
     public class ModbusReadResult
     {

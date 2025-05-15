@@ -12,7 +12,7 @@ Each project outputs a DLL. You can reference these from any WPF or other .NET F
 // -------------------------------
 
 
-namespace SANJET.SANJET.Core.Interfaces
+namespace SANJET.Core.Interfaces
 {
     /// <summary>
     /// Defines methods to play and stop pre-stored audio files.

@@ -1,5 +1,5 @@
 ﻿
-namespace SANJET.SANJET.Core.Interfaces
+namespace SANJET.Core.Interfaces
 {
     /// <summary>
     /// Defines methods to perform text-to-speech playback.

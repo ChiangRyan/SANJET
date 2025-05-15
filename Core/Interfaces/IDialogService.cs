@@ -1,5 +1,5 @@
 ﻿
-namespace SANJET.SANJET.Core.Interfaces
+namespace SANJET.Core.Interfaces
 {
     public interface ILoginDialogService
     {

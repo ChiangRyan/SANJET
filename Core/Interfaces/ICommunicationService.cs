@@ -1,6 +1,6 @@
 ﻿using SANJET.SANJET.Core.Models;
 
-namespace SANJET.SANJET.Core.Interfaces
+namespace SANJET.Core.Interfaces
 {
     public interface ICommunicationService
     {

@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace SANJET.SANJET.Core.Models
+namespace SANJET.Core.Models
 {
     public class User
     {

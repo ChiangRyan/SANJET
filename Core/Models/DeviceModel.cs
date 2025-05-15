@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Windows.Input;
 
-namespace SANJET.SANJET.Core.Models
+namespace SANJET.Core.Models
 {
     public class DeviceDataChangedEventArgs : System.EventArgs
     {
