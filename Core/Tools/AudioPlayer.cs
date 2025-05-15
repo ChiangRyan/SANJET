@@ -7,10 +7,10 @@
 
 using System.IO;
 using WMPLib;
-using SANJET.SANJET.Core.Interfaces;
+using SANJET.Core.Interfaces;
 
 
-namespace SANJET.SANJET.Core.Tools
+namespace SANJET.Core.Tools
 {
     /// <summary>
     /// Implements IAudioPlayer using Windows Media Player COM for broad format support.

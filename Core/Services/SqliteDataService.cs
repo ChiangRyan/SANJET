@@ -1,8 +1,8 @@
 ﻿using Microsoft.Data.Sqlite;
-using SANJET.SANJET.Core.Models;
+using SANJET.Core.Models;
 using System.Diagnostics;
 
-namespace SANJET.SANJET.Core.Services
+namespace SANJET.Core.Services
 {
     public class SqliteDataService
     {

@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Diagnostics;
-using SANJET.Core.Enums;
-using SANJET.SANJET.Core.Models;
+using SANJET.Core.Constants.Enums;
+using SANJET.Core.Models;
+using SANJET.Core.Services;
 
 
-namespace SANJET.SANJET.Core.Services
+namespace SANJET.Core.Services
 {
     public class PermissionService
     {

@@ -1,7 +1,6 @@
-﻿
-using SANJET.SANJET.Core.Interfaces;
+﻿using SANJET.Core.Interfaces;
 
-namespace SANJET.SANJET.Core.Tools
+namespace SANJET.Core.Tools
 {
     /// <summary>
     /// Implements ISpeechService using System.Speech.Synthesis for offline TTS.

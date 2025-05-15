@@ -2,14 +2,12 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Timers;
-
 using System.Windows;
-
-using SANJET.Core.Enums;
+using SANJET.Core.Constants.Enums;
 using System.IO;
 
 
-namespace SANJET.SANJET.Core.ViewModels
+namespace SANJET.Core.ViewModels
 {
     [AddINotifyPropertyChangedInterface]
     public class HomeViewModel : ViewModelBase

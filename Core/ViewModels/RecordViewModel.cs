@@ -1,20 +1,15 @@
 ﻿
 using System.Diagnostics;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows.Input;
 using System.Windows;
-
 using Microsoft.Win32;
 using System.IO;
 using OfficeOpenXml;
-using OfficeOpenXml.Style;
-using System.Drawing;
 using System.ComponentModel;
 using System.Windows.Data;
 
-namespace SANJET.SANJET.Core.ViewModels
+namespace SANJET.Core.ViewModels
 {
     [AddINotifyPropertyChangedInterface]
     public class RecordViewModel : ViewModelBase

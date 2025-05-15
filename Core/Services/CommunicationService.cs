@@ -1,11 +1,10 @@
-﻿using SANJET.SANJET.Core.Interfaces;
-using SANJET.SANJET.Core.Models;
+﻿using SANJET.Core.Interfaces;
+using SANJET.Core.Models;
 using System.Net.Http;
 using System.Text.Json;
 using System.Diagnostics;
 
-
-namespace SANJET.SANJET.Core.Services
+namespace SANJET.Core.Services
 {
     public class CommunicationService : ICommunicationService
     {

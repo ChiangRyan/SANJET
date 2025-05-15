@@ -1,7 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Input;
 
-namespace SANJET.SANJET.Core.ViewModels
+namespace SANJET.Core.ViewModels
 {
     public class LoginViewModel : ViewModelBase
     {

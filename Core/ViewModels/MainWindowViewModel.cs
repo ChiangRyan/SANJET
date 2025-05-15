@@ -1,13 +1,13 @@
-﻿using SANJET.Core.Enums;
+﻿using SANJET.Core.Constants.Enums;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Windows.Controls;
 using System.Windows;
-using SANJET.SANJET.Core.Services;
-using SANJET.SANJET.Core.Interfaces;
+using SANJET.Core.Services;
+using SANJET.Core.Interfaces;
 
 
-namespace SANJET.SANJET.Core.ViewModels
+namespace SANJET.Core.ViewModels
 {
     public partial class MainWindowViewModel : ObservableObject
     {

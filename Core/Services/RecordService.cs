@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Windows;
 using System.Diagnostics;
-using SANJET.SANJET.Core.Interfaces;
+using SANJET.Core.Interfaces;
 using SANJET.UI.Views.Windows;
+using SANJET.Core.Services;
 
 
-namespace SANJET.SANJET.Core.Services
+namespace SANJET.Core.Services
 {
     public class RecordService : IRecordDialogService
     {
