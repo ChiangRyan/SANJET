@@ -1,18 +1,19 @@
-﻿
-using System.Diagnostics;
-using System.Collections.ObjectModel;
-using System.Windows.Input;
-using System.Windows;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
-using System.IO;
 using OfficeOpenXml;
+using SANJET.Core.Models; // Assuming DeviceRecord is here
+using SANJET.Core.Services; // Assuming SqliteDataService is here
+using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Windows.Data;
+using System.Diagnostics;
+using System.IO;
+using System.Windows; // For MessageBox
+using System.Windows.Data; // For CollectionViewSource
 
 namespace SANJET.Core.ViewModels
 {
-    [AddINotifyPropertyChangedInterface]
-    public class RecordViewModel : ViewModelBase
+    public partial class RecordViewModel : ObservableObject // Inherit from ObservableObject
     {
         private readonly SqliteDataService _dataService;
         private readonly int _deviceId;
@@ -20,34 +21,26 @@ namespace SANJET.Core.ViewModels
         private readonly string _currentUsername;
         private readonly int _runcount;
 
-        // 記錄集合
-        public ObservableCollection<DeviceRecord> DeviceRecords { get; set; }
-        // 篩選後的記錄集合（用於 DataGrid 顯示）
-        private ICollectionView _filteredDeviceRecords;
-        public ICollectionView FilteredDeviceRecords
-        {
-            get => _filteredDeviceRecords;
-            set
-            {
-                _filteredDeviceRecords = value;
-                OnPropertyChanged(nameof(FilteredDeviceRecords));
-            }
-        }
-        // 選中的記錄
-        public DeviceRecord SelectedRecord { get; set; }
-        // 記錄內容
-        public string RecordContent { get; set; }
-        // 篩選條件
-        public string FilterUsername { get; set; }
-        public DateTime? FilterStartDate { get; set; }
+        // Observable Properties generated from these fields
+        [ObservableProperty]
+        private ObservableCollection<DeviceRecord> _deviceRecords;
 
-        // 命令
-        public ICommand AddRecordCommand { get; private set; }
-        public ICommand RefreshCommand { get; private set; }
-        public ICommand DeleteRecordCommand { get; private set; }
-        public ICommand ExportToExcelCommand { get; private set; }
-        public ICommand ApplyFilterCommand { get; private set; }
-        public ICommand ResetFilterCommand { get; private set; }
+        [ObservableProperty]
+        private ICollectionView _filteredDeviceRecords;
+
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(DeleteRecordCommand))] // Notify DeleteRecordCommand when SelectedRecord changes
+        private DeviceRecord? _selectedRecord; // Nullable if it can be unselected
+
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(AddRecordCommand))] // Notify AddRecordCommand when RecordContent changes
+        private string _recordContent = string.Empty;
+
+        [ObservableProperty]
+        private string _filterUsername = string.Empty;
+
+        [ObservableProperty]
+        private DateTime? _filterStartDate;
 
         public RecordViewModel(List<DeviceRecord> records, int deviceId, string deviceName, string username, int runcount, SqliteDataService dataService)
         {
@@ -62,22 +55,19 @@ namespace SANJET.Core.ViewModels
             {
                 Debug.WriteLine($"無效的 DeviceId: {_deviceId}");
                 MessageBox.Show($"設備 ID {_deviceId} 不存在於資料庫中，請選擇有效設備", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                // Initialize collections to prevent null issues, even if device is invalid
+                _deviceRecords = new ObservableCollection<DeviceRecord>();
+                _filteredDeviceRecords = CollectionViewSource.GetDefaultView(_deviceRecords);
+                return; // Potentially exit early or handle differently
             }
-            // 初始化記錄集合
-            DeviceRecords = new ObservableCollection<DeviceRecord>(records.OrderByDescending(r => r.Timestamp));
 
-            // 初始化 CollectionView 進行排序和篩選
-            FilteredDeviceRecords = CollectionViewSource.GetDefaultView(DeviceRecords);
+            _deviceRecords = new ObservableCollection<DeviceRecord>(records.OrderByDescending(r => r.Timestamp));
+            _filteredDeviceRecords = CollectionViewSource.GetDefaultView(DeviceRecords); // Use the generated public property
             FilteredDeviceRecords.SortDescriptions.Add(new SortDescription("Timestamp", ListSortDirection.Descending));
             FilteredDeviceRecords.Filter = FilterRecords;
 
-            // 初始化命令
-            AddRecordCommand = new RelayCommand(AddRecord, CanAddRecord);
-            RefreshCommand = new RelayCommand(RefreshRecords);
-            DeleteRecordCommand = new RelayCommand(DeleteRecord, CanDeleteRecord);
-            ExportToExcelCommand = new RelayCommand(ExportToExcel, CanExportToExcel);
-            ApplyFilterCommand = new RelayCommand(ApplyFilter);
-            ResetFilterCommand = new RelayCommand(ResetFilter);
+            // Command properties (e.g., AddRecordCommand) are now generated by [RelayCommand] attributes on methods.
+            // No need to initialize them here.
         }
 
         private bool CanAddRecord()
@@ -85,16 +75,7 @@ namespace SANJET.Core.ViewModels
             return !string.IsNullOrWhiteSpace(RecordContent);
         }
 
-        private bool CanDeleteRecord()
-        {
-            return SelectedRecord != null;
-        }
-
-        private bool CanExportToExcel()
-        {
-            return DeviceRecords != null && DeviceRecords.Count > 0;
-        }
-
+        [RelayCommand(CanExecute = nameof(CanAddRecord))]
         private void AddRecord()
         {
             try
@@ -107,25 +88,19 @@ namespace SANJET.Core.ViewModels
                    $" Content={RecordContent}"
                 );
 
-                // 建立新記錄
                 var newRecord = new DeviceRecord
                 {
                     DeviceId = _deviceId,
                     DeviceName = _deviceName,
                     RunCount = _runcount,
                     Username = _currentUsername,
-                    Content = RecordContent.Trim(),
+                    Content = RecordContent.Trim(), // Use generated property
                     Timestamp = DateTime.Now
                 };
 
-                // 保存到資料庫
                 _dataService.AddDeviceRecord(newRecord);
-
-                // 刷新顯示
-                RefreshRecords();
-
-                // 清空輸入
-                RecordContent = string.Empty;
+                RefreshRecords(); // This is now a command, but can also be called directly as a method
+                RecordContent = string.Empty; // Reset input
 
                 MessageBox.Show("記錄已成功添加！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -136,38 +111,42 @@ namespace SANJET.Core.ViewModels
             }
         }
 
+        private bool CanDeleteRecord()
+        {
+            return SelectedRecord != null;
+        }
+
+        [RelayCommand(CanExecute = nameof(CanDeleteRecord))]
         private void DeleteRecord()
         {
+            // SelectedRecord is an [ObservableProperty], so we use its generated public property name.
+            if (SelectedRecord == null) // Should be caught by CanDeleteRecord, but good for safety
+            {
+                MessageBox.Show("請先選擇要刪除的記錄", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             try
             {
-                if (SelectedRecord == null)
-                {
-                    MessageBox.Show("請先選擇要刪除的記錄", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-
-                // 確認刪除
                 var result = MessageBox.Show($"確定要刪除ID為 {SelectedRecord.Id} 的記錄嗎？", "確認刪除",
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
 
                 if (result == MessageBoxResult.Yes)
                 {
                     Debug.WriteLine($"正在刪除記錄 ID: {SelectedRecord.Id}，設備 ID: {_deviceId}");
-
-                    // 從資料庫中刪除，傳遞 deviceId 和 recordId
                     bool success = _dataService.DeleteDeviceRecord(_deviceId, SelectedRecord.Id);
 
                     if (success)
                     {
-                        // 從集合中移除
-                        DeviceRecords.Remove(SelectedRecord);
+                        DeviceRecords.Remove(SelectedRecord); // Update original collection
+                        // FilteredDeviceRecords will update automatically if bound to DeviceRecords
+                        // or call FilteredDeviceRecords.Refresh() if needed.
                         MessageBox.Show("記錄已成功刪除！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     else
                     {
                         MessageBox.Show("刪除記錄失敗！記錄可能已被其他用戶刪除。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
-                        // 刷新所有記錄
-                        RefreshRecords();
+                        RefreshRecords(); // Method call
                     }
                 }
             }
@@ -178,21 +157,20 @@ namespace SANJET.Core.ViewModels
             }
         }
 
+        [RelayCommand]
         private void RefreshRecords()
         {
             try
             {
-                // 從資料庫中重新讀取此設備的記錄
                 var records = _dataService.GetDeviceRecords(_deviceId);
-
-                // 更新記錄集合
                 DeviceRecords.Clear();
                 foreach (var record in records.OrderByDescending(r => r.Timestamp))
                 {
                     DeviceRecords.Add(record);
                 }
-                // 重新應用篩選
-                FilteredDeviceRecords.Refresh();
+                // FilteredDeviceRecords.Refresh(); // CollectionViewSource.GetDefaultView should auto-refresh
+                // if the source (DeviceRecords) is an ObservableCollection
+                // and items are added/removed. If full re-filtering is needed, call Refresh.
             }
             catch (Exception ex)
             {
@@ -200,11 +178,16 @@ namespace SANJET.Core.ViewModels
             }
         }
 
+        private bool CanExportToExcel()
+        {
+            return DeviceRecords != null && DeviceRecords.Any();
+        }
+
+        [RelayCommand(CanExecute = nameof(CanExportToExcel))]
         private void ExportToExcel()
         {
             try
             {
-                // 建立儲存檔案對話框
                 SaveFileDialog saveFileDialog = new SaveFileDialog
                 {
                     Filter = "Excel檔案 (*.xlsx)|*.xlsx",
@@ -216,31 +199,34 @@ namespace SANJET.Core.ViewModels
                 if (saveFileDialog.ShowDialog() == true)
                 {
                     string filePath = saveFileDialog.FileName;
-                    // 檢查檔案是否已存在
-                    string templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "導出模板", "CP08-003-02版-產品測試記錄表.xlsx");
-                    // 檢查模板檔案是否存在
+                    // Use AppContext.BaseDirectory for .NET Core / .NET 5+
+                    string templatePath = Path.Combine(AppContext.BaseDirectory, "導出模板", "CP08-003-02版-產品測試記錄表.xlsx");
+
                     if (!File.Exists(templatePath))
                     {
                         MessageBox.Show($"模板檔案不存在: {templatePath}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
                     }
-                    // 設定EPPlus許可模式
-                    // 如果你代表「機構」以非商業方式使用：
-                    ExcelPackage.License.SetNonCommercialOrganization("Sanjet");
-                    // 或者，若只是「個人」非商業使用：
-                    //ExcelPackage.License.SetNonCommercialPersonal("你的姓名");
 
-                    // 使用模板載入
+                    // EPPlus 6+ License
+                    ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial; // Or your specific license type
+                    // If you have a specific license key mechanism like before:
+                    // ExcelPackage.License.SetNonCommercialOrganization("Sanjet");
+
+
                     using (var package = new ExcelPackage(new FileInfo(templatePath)))
                     {
-                        var worksheet = package.Workbook.Worksheets[0]; // 假設只用第一個工作表
-
-                        // 創建工作表
-                        //var worksheet = package.Workbook.Worksheets.Add($"{_deviceName}記錄");
+                        var worksheet = package.Workbook.Worksheets.FirstOrDefault(); // Get the first worksheet
+                        if (worksheet == null)
+                        {
+                            MessageBox.Show("模板檔案中找不到工作表。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                            return;
+                        }
 
                         int startRow = 4; // 根據模板格式調整填寫起始列
 
-                        foreach (var record in DeviceRecords.OrderBy(r => r.Timestamp))  // 根據時間排序「舊 → 新」
+                        // Use the public DeviceRecords property
+                        foreach (var record in DeviceRecords.OrderBy(r => r.Timestamp))
                         {
                             worksheet.Cells[startRow, 1].Value = record.Id;
                             worksheet.Cells[startRow, 2].Value = record.Timestamp;
@@ -250,68 +236,22 @@ namespace SANJET.Core.ViewModels
                             worksheet.Cells[startRow, 5].Value = record.Content;
                             worksheet.Cells[startRow, 6].Value = record.Username;
                             startRow++;
-
-                            // 自動調整欄寬
+                        }
+                        // AutoFitColumns after data is inserted
+                        if (startRow > 4) // Check if any data was actually written
+                        {
                             worksheet.Cells[1, 1, startRow - 1, 6].AutoFitColumns();
                         }
 
-                        /*
-                        // 設定標題行
-                        worksheet.Cells[1, 1].Value = "排序";
-                        worksheet.Cells[1, 2].Value = "日期時間";
-                        worksheet.Cells[1, 3].Value = "機種";
-                        worksheet.Cells[1, 4].Value = "跑合";
-                        worksheet.Cells[1, 5].Value = "測試狀況";
-                        worksheet.Cells[1, 6].Value = "使用者";
 
-                        // 格式化標題行
-                        using (var range = worksheet.Cells[1, 1, 1, 6])
-                        {
-                            range.Style.Font.Bold = true;
-                            range.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                            range.Style.Fill.BackgroundColor.SetColor(Color.LightBlue);
-                            range.Style.Font.Size = 12;
-                            range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                        }
-
-                        // 填充資料
-                        int row = 2;
-                        foreach (var record in DeviceRecords)
-                        {
-                            worksheet.Cells[row, 1].Value = record.Id;
-                            worksheet.Cells[row, 2].Value = record.Timestamp;
-                            worksheet.Cells[row, 2].Style.Numberformat.Format = "yyyy-mm-dd hh:mm:ss";
-                            worksheet.Cells[row, 3].Value = record.DeviceName;
-                            worksheet.Cells[row, 4].Value = record.RunCount;
-                            worksheet.Cells[row, 5].Value = record.Content;
-                            worksheet.Cells[row, 6].Value = record.Username;
-                            row++;
-                        }
-
-                        // 自動調整欄寬
-                        worksheet.Cells[1, 1, row - 1, 6].AutoFitColumns();
-
-                        // 設定備註信息
-                        //worksheet.Cells[row + 1, 1].Value = $"導出時間: {DateTime.Now}";
-                        //worksheet.Cells[row + 2, 1].Value = $"導出者: {_currentUsername}";
-
-                         
-
-
-                        // 保存檔案
                         package.SaveAs(new FileInfo(filePath));
                     }
 
                     MessageBox.Show($"記錄已成功導出至: {filePath}", "導出成功", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                    // 詢問用戶是否打開檔案
                     if (MessageBox.Show("是否立即打開導出的檔案？", "操作確認", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = filePath,
-                            UseShellExecute = true
-                        });
+                        Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
                     }
                 }
             }
@@ -324,18 +264,16 @@ namespace SANJET.Core.ViewModels
 
         private bool FilterRecords(object item)
         {
-            var record = item as DeviceRecord;
-            if (record == null) return false;
+            if (item is not DeviceRecord record) return false;
 
             bool matches = true;
 
-            // 篩選使用者
+            // Use generated public properties for filter values
             if (!string.IsNullOrWhiteSpace(FilterUsername))
             {
-                matches &= record.Username.IndexOf(FilterUsername, StringComparison.OrdinalIgnoreCase) >= 0;
+                matches &= record.Username.Contains(FilterUsername, StringComparison.OrdinalIgnoreCase);
             }
 
-            // 篩選開始日期
             if (FilterStartDate.HasValue)
             {
                 matches &= record.Timestamp.Date >= FilterStartDate.Value.Date;
@@ -344,12 +282,13 @@ namespace SANJET.Core.ViewModels
             return matches;
         }
 
+        [RelayCommand]
         private void ApplyFilter()
         {
             try
             {
                 Debug.WriteLine("Applying filter...");
-                FilteredDeviceRecords.Refresh();
+                FilteredDeviceRecords.Refresh(); // Use generated public property
             }
             catch (Exception ex)
             {
@@ -358,14 +297,15 @@ namespace SANJET.Core.ViewModels
             }
         }
 
+        [RelayCommand]
         private void ResetFilter()
         {
             try
             {
                 Debug.WriteLine("Resetting filter...");
-                 FilterUsername = string.Empty;
+                FilterUsername = string.Empty; // Use generated public property setters
                 FilterStartDate = null;
-                FilteredDeviceRecords.Refresh();
+                FilteredDeviceRecords.Refresh(); // Use generated public property
             }
             catch (Exception ex)
             {
@@ -375,6 +315,3 @@ namespace SANJET.Core.ViewModels
         }
     }
 }
-
-*/
-

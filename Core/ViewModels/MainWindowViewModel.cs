@@ -5,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows;
 using SANJET.Core.Services;
 using SANJET.Core.Interfaces;
-
+using System.Diagnostics;
 
 namespace SANJET.Core.ViewModels
 {

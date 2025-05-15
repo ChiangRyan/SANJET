@@ -1,9 +1,7 @@
-﻿using System;
-using System.Windows;
+﻿using System.Windows;
 using System.Diagnostics;
 using SANJET.Core.Interfaces;
 using SANJET.UI.Views.Windows;
-using SANJET.Core.Services;
 
 
 namespace SANJET.Core.Services

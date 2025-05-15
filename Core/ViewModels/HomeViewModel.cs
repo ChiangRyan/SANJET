@@ -1,128 +1,153 @@
-﻿
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using SANJET.Core.Constants.Enums;
+using SANJET.Core.Interfaces;
+using SANJET.Core.Models; // 確保 DeviceModel 在這裡
+using SANJET.Core.Services;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Timers;
-using System.Windows;
-using SANJET.Core.Constants.Enums;
 using System.IO;
 
 
+using System.Windows; // For MessageBox
+
 namespace SANJET.Core.ViewModels
 {
-    [AddINotifyPropertyChangedInterface]
-    public class HomeViewModel : ViewModelBase
+    public partial class HomeViewModel : ObservableObject // 1. 繼承 ObservableObject
     {
         private readonly ICommunicationService _communicationService;
         private readonly SqliteDataService _dataService;
         private readonly PermissionService _permissionService;
         private readonly IRecordDialogService _recorddialogService;
-        private readonly ITextToSpeechService _textToSpeechService; // Add TTS service
-        private readonly IAudioPlayerService _audioPlayerService; // Add TTS service
+        private readonly ITextToSpeechService _textToSpeechService;
+        private readonly IAudioPlayerService _audioPlayerService;
 
-        // 添加控制設備的權限屬性
-        public bool CanControlDevice => _permissionService.HasPermission(Permission.ControlDevice);
+        private readonly System.Timers.Timer _updateTimer; //明確指定 Timer 的命名空間
 
-        private readonly Timer _updateTimer;
-
-        //Mapping Modbus位置設置
+        // Modbus 位置設定
         private readonly int _runCountAddress = 10;
         private readonly int _statusAddress = 1;
         private readonly int _controlAddress = 0;
 
-        public ObservableCollection<DeviceModel> Devices { get; set; }
+        // 2. 使用 [ObservableProperty]
+        [ObservableProperty]
+        private ObservableCollection<DeviceModel> _devices;
 
-        // 添加语音播报的预设文本
-        public string StartAnnouncement { get; set; } = "啟動中，請注意安全"; // 默认启动播报文本
-        public string StopAnnouncement { get; set; } = "停止中，請注意安全"; // 默认停止播报文本
-        public bool EnableVoiceAnnouncement { get; set; } = true; // 语音播报开关
+        [ObservableProperty]
+        private string _startAnnouncement = "啟動中，請注意安全";
+
+        [ObservableProperty]
+        private string _stopAnnouncement = "停止中，請注意安全";
+
+        [ObservableProperty]
+        private bool _enableVoiceAnnouncement = true;
+
+        // CanControlDevice 屬性依賴於 PermissionService 的事件
+        public bool CanControlDevice => _permissionService.HasPermission(Permission.ControlDevice);
 
         public HomeViewModel(
             ICommunicationService communicationService,
             SqliteDataService dataService,
-            IRecordDialogService RecordDialogService,
+            IRecordDialogService recordDialogService,
             PermissionService permissionService,
-            ITextToSpeechService textToSpeechService,  // 添加文字转语音服务参数
-            IAudioPlayerService audioPlayerService // 添加音频播放器服务参数
-            )
-
+            ITextToSpeechService textToSpeechService,
+            IAudioPlayerService audioPlayerService)
         {
             _communicationService = communicationService;
             _dataService = dataService;
-            _recorddialogService = RecordDialogService;
+            _recorddialogService = recordDialogService;
             _permissionService = permissionService;
-            _textToSpeechService = textToSpeechService; // 设置文字转语音服务
-            _audioPlayerService = audioPlayerService; // 设置音频播放器服务
-
+            _textToSpeechService = textToSpeechService;
+            _audioPlayerService = audioPlayerService;
 
             // 設置語音速度
             _textToSpeechService.Rate = -1;
 
             // 訂閱權限變更事件
-            _permissionService.PermissionsChanged += (s, e) =>
-            {
-                Debug.WriteLine($"PermissionsChanged event triggered: CanControlDevice={CanControlDevice}");
-                OnPropertyChanged(nameof(CanControlDevice));
-                // 如果失去控制權限，停止輪詢
-                if (!CanControlDevice)
-                {
-                    StopPolling();
-                    Debug.WriteLine("Polling stopped due to lack of ControlDevice permission.");
-                }
-            };
+            _permissionService.PermissionsChanged += OnPermissionsChanged;
 
-            Devices = new ObservableCollection<DeviceModel>();
+            _devices = new ObservableCollection<DeviceModel>(); // 初始化 ObservableProperty 的後備欄位
 
             // 先從資料庫載入設備數據
             LoadDevicesFromDatabase();
 
             // 如果資料庫中沒有設備數據，則初始化預設設備
-            if (!Devices.Any())
+            if (!Devices.Any()) // Devices 屬性由 [ObservableProperty] 生成
             {
                 InitializeDefaultDevices();
             }
 
-            _updateTimer = new Timer(5000);
-            _updateTimer.Elapsed += async (s, e) => await UpdateDeviceData();
+            _updateTimer = new System.Timers.Timer(5000);
+            _updateTimer.Elapsed += async (s, e) => await UpdateDeviceDataAsync(); // 方法名加上 Async 後綴以示區別
             _updateTimer.AutoReset = true;
         }
 
-        // 播放语音提示
-        private void AnnounceDevice(DeviceModel device, string action)
+        private void OnPermissionsChanged(object? sender, EventArgs e)
+        {
+            OnPropertyChanged(nameof(CanControlDevice)); // 手動通知 CanControlDevice 變更
+            Debug.WriteLine($"PermissionsChanged event triggered: CanControlDevice={CanControlDevice}");
+            // 如果失去控制權限，停止輪詢
+            if (!CanControlDevice)
+            {
+                StopPolling();
+                Debug.WriteLine("Polling stopped due to lack of ControlDevice permission.");
+            }
+        }
+
+        private void AnnounceDevice(DeviceModel device, string actionMessage)
         {
             if (!EnableVoiceAnnouncement) return;
 
             try
             {
-                string announcement = $"設備 {device.Name} {action}";
+                string announcement = $"設備 {device.Name} {actionMessage}";
                 _textToSpeechService.Speak(announcement);
                 Debug.WriteLine($"语音播报: {announcement}");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"语音播报错误: {ex.Message}");
-                // 不向用户显示错误，保持程序继续运行
             }
         }
 
-
-        // 播放音频提示
-        private void PlayAudioAnnouncement(string action)
+        private void PlayAudioAnnouncement(string audioFileNameKey) // 參數可以是檔案名或代表動作的鍵
         {
             if (!EnableVoiceAnnouncement) return;
             try
             {
-                string audioFileName = "SquidGame1.mp3";
-                string audioFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, audioFileName);
-                _audioPlayerService.Play(audioFilePath);
-                Debug.WriteLine($"音频播报: {audioFilePath}");
+                // 假設 audioFileNameKey 為 "Start" 或 "Stop" 等，對應到具體的 mp3 檔案
+                // 您可能需要一個機制來從 key 映射到檔案路徑
+                string audioFileName = "SquidGame1.mp3"; // 範例檔案名
+                if (audioFileNameKey == StopAnnouncement) // 簡單示例，您可能需要更複雜的邏輯
+                {
+                    // audioFileName = "another_sound.mp3"; // 例如停止時播放不同音效
+                }
+
+                // 使用 AppContext.BaseDirectory 替代 AppDomain.CurrentDomain.BaseDirectory in .NET Core/.NET 5+
+                string audioFilePath = Path.Combine(AppContext.BaseDirectory, "Audio", audioFileName); // 假設音檔在 Audio 子目錄
+                if (!File.Exists(audioFilePath))
+                {
+                    Debug.WriteLine($"Audio file not found: {audioFilePath}");
+                    // 嘗試在根目錄尋找 (相容舊路徑)
+                    audioFilePath = Path.Combine(AppContext.BaseDirectory, audioFileName);
+                }
+
+
+                if (File.Exists(audioFilePath))
+                {
+                    _audioPlayerService.Play(audioFilePath);
+                    Debug.WriteLine($"音频播报: {audioFilePath}");
+                }
+                else
+                {
+                    Debug.WriteLine($"Audio file still not found after checking multiple paths: {audioFileName}");
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"音频播报错误: {ex.Message}");
-                // 不向用户显示错误，保持程序继续运行
             }
         }
-
 
         private void LoadDevicesFromDatabase()
         {
@@ -131,17 +156,19 @@ namespace SANJET.Core.ViewModels
             {
                 string ipAddress;
                 int slaveId;
-                if (deviceDataList.IndexOf(data) < 10)
+                int index = deviceDataList.IndexOf(data); // 獲取當前 data 的索引
+
+                if (index < 10)
                 {
                     ipAddress = "192.168.64.52";
-                    slaveId = deviceDataList.IndexOf(data) + 1;
+                    slaveId = index + 1;
                 }
-                else if (deviceDataList.IndexOf(data) == 10)
+                else if (index == 10)
                 {
                     ipAddress = "192.168.64.87";
                     slaveId = 1;
                 }
-                else
+                else // index == 11 (or more, if device count changes)
                 {
                     ipAddress = "192.168.64.89";
                     slaveId = 1;
@@ -149,8 +176,8 @@ namespace SANJET.Core.ViewModels
 
                 var device = new DeviceModel
                 {
-                    Id = data.Id, // 使用資料庫中的 ID，確保 ID 從資料庫中正確載入
-                    Name = data.Name ?? $"設備 {deviceDataList.IndexOf(data) + 1}", // 使用資料庫名稱，無則用預設
+                    Id = data.Id,
+                    Name = data.Name ?? $"設備 {index + 1}",
                     IpAddress = data.IpAddress ?? ipAddress,
                     SlaveId = data.SlaveId > 0 ? data.SlaveId : slaveId,
                     RunCount = data.RunCount,
@@ -158,14 +185,18 @@ namespace SANJET.Core.ViewModels
                     IsOperational = data.IsOperational
                 };
 
-                int deviceIndex = deviceDataList.IndexOf(data);
-                device.StartCommand = new RelayCommand(async () => await ExecuteStart(deviceIndex));
-                device.StopCommand = new RelayCommand(async () => await ExecuteStop(deviceIndex));
-                device.RecordCommand = new RelayCommand(() => ShowRecordWindow(deviceIndex)); // 添加记录按钮命令
+                // 3. 使用 MVVM Toolkit 的 RelayCommand/AsyncRelayCommand
+                // 由於 ExecuteStartAsync 等方法現在是 HomeViewModel 的一部分 (透過 [RelayCommand] or similar)
+                // 或者它們是私有方法被這裡的 Lambda 調用。
+                // 當命令在 DeviceModel 上時，我們仍需手動創建它們。
+                // 這裡的 deviceIndex 就是上面獲取的 index
+                device.StartCommand = new AsyncRelayCommand(async () => await ExecuteStartDeviceAsync(device));
+                device.StopCommand = new AsyncRelayCommand(async () => await ExecuteStopDeviceAsync(device));
+                device.RecordCommand = new RelayCommand(() => ShowRecordWindowForDevice(device));
 
-                device.DataChanged += (sender, e) => DeviceDataChanged(deviceIndex, e.Name, e.IpAddress, e.SlaveId, e.IsOperational, e.RunCount);
+                device.DataChanged += (sender, e) => DeviceDataChanged(device, e.Name, e.IpAddress, e.SlaveId, e.IsOperational, e.RunCount);
 
-                Devices.Add(device);
+                Devices.Add(device); // Devices 是 [ObservableProperty] 的欄位 _devices 的公開屬性
                 Debug.WriteLine($"Loaded device: Id={device.Id}, Name={device.Name}, IP={device.IpAddress}, SlaveId={device.SlaveId}, IsOperational={device.IsOperational}, RunCount={device.RunCount}");
             }
         }
@@ -186,7 +217,7 @@ namespace SANJET.Core.ViewModels
                     ipAddress = "192.168.64.87";
                     slaveId = 1;
                 }
-                else
+                else // i == 11
                 {
                     ipAddress = "192.168.64.89";
                     slaveId = 1;
@@ -194,76 +225,71 @@ namespace SANJET.Core.ViewModels
 
                 var device = new DeviceModel
                 {
-                    Id = i + 1,
+                    Id = i + 1, // 假設 Id 從 1 開始
                     Name = $"設備 {i + 1}",
                     IpAddress = ipAddress,
                     SlaveId = slaveId,
                     RunCount = 0,
                     Status = "未知",
-                    IsOperational = false
+                    IsOperational = false // 預設為 false，讓使用者手動啟用
                 };
 
-                int deviceIndex = i;
-                device.StartCommand = new RelayCommand(async () => await ExecuteStart(deviceIndex));
-                device.StopCommand = new RelayCommand(async () => await ExecuteStop(deviceIndex));
-                device.RecordCommand = new RelayCommand(() => ShowRecordWindow(deviceIndex)); // 添加记录按钮命令
+                device.StartCommand = new AsyncRelayCommand(async () => await ExecuteStartDeviceAsync(device));
+                device.StopCommand = new AsyncRelayCommand(async () => await ExecuteStopDeviceAsync(device));
+                device.RecordCommand = new RelayCommand(() => ShowRecordWindowForDevice(device));
 
-                device.DataChanged += (sender, e) => DeviceDataChanged(deviceIndex, e.Name, e.IpAddress, e.SlaveId, e.IsOperational, e.RunCount);
+                device.DataChanged += (sender, e) => DeviceDataChanged(device, e.Name, e.IpAddress, e.SlaveId, e.IsOperational, e.RunCount);
 
                 Devices.Add(device);
-                _dataService.SaveDeviceData(i, device.Name, device.IpAddress, device.SlaveId, device.IsOperational, device.RunCount);
+                // 儲存到資料庫時，Id 通常由資料庫生成 (如果 Id 是主鍵且自增長)
+                // 或者如果我們自己管理 Id，要確保與 DeviceModel.Id 一致
+                // SaveDeviceData 的第一個參數是 deviceIndex (0-based)，但 DeviceModel.Id 是 1-based
+                _dataService.SaveDeviceData(device.Id - 1, device.Name, device.IpAddress, device.SlaveId, device.IsOperational, device.RunCount);
                 Debug.WriteLine($"Initialized default device {i + 1}: Id={device.Id}, Name={device.Name}, IP={device.IpAddress}, SlaveId={device.SlaveId}, IsOperational={device.IsOperational}, RunCount={device.RunCount}");
             }
         }
 
-        [SuppressPropertyChangedWarnings]
-        private void DeviceDataChanged(int deviceIndex, string name, string ipAddress, int slaveId, bool isOperational, int runCount)
+        // 參數改為 DeviceModel，移除 [SuppressPropertyChangedWarnings] (Fody)
+        private void DeviceDataChanged(DeviceModel device, string name, string ipAddress, int slaveId, bool isOperational, int runCount)
         {
-            var device = Devices[deviceIndex];
             if (device != null)
             {
-                device.Name = name;
-                device.IpAddress = ipAddress;
-                device.SlaveId = slaveId;
-                device.IsOperational = isOperational;
-                device.RunCount = runCount;
-                int dbIndex = device.Id - 1; // 由於資料庫 ID 從 1 開始，轉換為從 0 開始的索引
-                _dataService.SaveDeviceData(dbIndex, name, ipAddress, slaveId, isOperational, runCount);
-                Debug.WriteLine($"Saved changes for device {deviceIndex + 1}: Name={name}, IP={ipAddress}, SlaveId={slaveId}, IsOperational={isOperational}, RunCount={runCount}");
+                // 更新 DeviceModel 的屬性 (如果它們還沒被 DataChanged 事件的觸發源更新的話)
+                // 實際上，DeviceModel 的 setter 應該已經觸發了 DataChanged，所以這裡主要是為了儲存
+                // device.Name = name; // 通常 DataChanged 事件發生在屬性已改變之後
+                // device.IpAddress = ipAddress;
+                // device.SlaveId = slaveId;
+                // device.IsOperational = isOperational;
+                // device.RunCount = runCount;
+
+                // 確保使用正確的 Id (通常是 device.Id - 1 如果 SaveDeviceData 的 deviceIndex 是 0-based)
+                _dataService.SaveDeviceData(device.Id - 1, name, ipAddress, slaveId, isOperational, runCount);
+                Debug.WriteLine($"Saved changes for device {device.Name} (ID: {device.Id}): Name={name}, IP={ipAddress}, SlaveId={slaveId}, IsOperational={isOperational}, RunCount={runCount}");
             }
         }
 
-        private async Task UpdateDeviceData()
+        private async Task UpdateDeviceDataAsync()
         {
             foreach (var device in Devices)
             {
                 if (!device.IsOperational)
                 {
-                    //Debug.WriteLine($"Skipping update for device {device.Name}: Device is not operational.");
                     continue;
                 }
 
                 try
                 {
                     var statusResult = await _communicationService.ReadModbusAsync(device.IpAddress, device.SlaveId, _statusAddress, 1, 3);
-                    if (statusResult.Status == "success" && statusResult.Data.Count > 0)
+                    if (statusResult.Status == "success" && statusResult.Data.Any())
                     {
                         int statusValue = statusResult.Data[0];
-                        switch (statusValue)
+                        device.Status = statusValue switch
                         {
-                            case 0:
-                                device.Status = "閒置";
-                                break;
-                            case 1:
-                                device.Status = "運行中";
-                                break;
-                            case 2:
-                                device.Status = "故障";
-                                break;
-                            default:
-                                device.Status = "未知";
-                                break;
-                        }
+                            0 => "閒置",
+                            1 => "運行中",
+                            2 => "故障",
+                            _ => "未知"
+                        };
                         Debug.WriteLine($"Device {device.Name} status updated: {device.Status}");
                     }
                     else
@@ -273,7 +299,7 @@ namespace SANJET.Core.ViewModels
                         Debug.WriteLine($"Failed to read status for device {device.Name}: {statusResult.Message}");
                     }
 
-                    if (device.IsOperational) // 只有在仍運作時才繼續讀取跑合次數
+                    if (device.IsOperational)
                     {
                         var runCountResult = await _communicationService.ReadModbusAsync(device.IpAddress, device.SlaveId, _runCountAddress, 2, 3);
                         if (runCountResult.Status == "success" && runCountResult.Data.Count >= 2)
@@ -286,7 +312,7 @@ namespace SANJET.Core.ViewModels
                         else
                         {
                             device.Status = "通訊失敗";
-                            device.IsOperational = false; // 通訊失敗時，自動設為不運作
+                            device.IsOperational = false;
                             Debug.WriteLine($"Failed to read run count for device {device.Name}: {runCountResult.Message}");
                         }
                     }
@@ -295,17 +321,17 @@ namespace SANJET.Core.ViewModels
                 {
                     Debug.WriteLine($"Failed to update device {device.Name}: {ex.Message}");
                     device.Status = "通訊失敗";
-                    device.IsOperational = false; // 異常時也設為不運作
+                    device.IsOperational = false;
                 }
             }
         }
 
-        private async Task ExecuteStart(int deviceIndex)
+        // 改為接收 DeviceModel 參數，以便於從 UI 綁定 CommandParameter
+        private async Task ExecuteStartDeviceAsync(DeviceModel device)
         {
-            var device = Devices[deviceIndex];
-            if (!device.IsOperational || device.Status == "運行中" || device.Status == "通訊失敗")
+            if (device == null || !device.IsOperational || device.Status == "運行中" || device.Status == "通訊失敗")
             {
-                Debug.WriteLine($"Cannot start device {device.Name}: Device is not operational, already running, or communication failed.");
+                Debug.WriteLine($"Cannot start device {(device?.Name) ?? "N/A"}: Device is not operational, already running, or communication failed.");
                 return;
             }
 
@@ -313,32 +339,33 @@ namespace SANJET.Core.ViewModels
             try
             {
                 _updateTimer.Stop();
-                Debug.WriteLine("Update timer stopped for ExecuteStart.");
+                Debug.WriteLine("Update timer stopped for ExecuteStartDeviceAsync.");
                 await _communicationService.WriteModbusAsync(device.IpAddress, device.SlaveId, _controlAddress, 1, 6);
-                await UpdateDeviceData();
+                await UpdateDeviceDataAsync(); // 立即更新一次狀態
 
-                // 播报设备启动
-                AnnounceDevice(device, StartAnnouncement);
-                PlayAudioAnnouncement(StartAnnouncement);
+                AnnounceDevice(device, StartAnnouncement); // StartAnnouncement 是 [ObservableProperty]
+                PlayAudioAnnouncement(StartAnnouncement); // 傳遞播報文本作為識別鍵
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"ExecuteStart failed: {ex.Message}");
+                Debug.WriteLine($"ExecuteStartDeviceAsync for {device.Name} failed: {ex.Message}");
                 device.Status = "啟動失敗";
             }
             finally
             {
-                _updateTimer.Start();
-                Debug.WriteLine("Update timer restarted after ExecuteStart.");
+                if (CanControlDevice) // 只有在仍有權限時才重啟 timer
+                {
+                    _updateTimer.Start();
+                    Debug.WriteLine("Update timer restarted after ExecuteStartDeviceAsync.");
+                }
             }
         }
 
-        private async Task ExecuteStop(int deviceIndex)
+        private async Task ExecuteStopDeviceAsync(DeviceModel device)
         {
-            var device = Devices[deviceIndex];
-            if (!device.IsOperational || device.Status == "閒置" || device.Status == "通訊失敗")
+            if (device == null || !device.IsOperational || device.Status == "閒置" || device.Status == "通訊失敗")
             {
-                Debug.WriteLine($"Cannot stop device {device.Name}: Device is not operational, already idle, or communication failed.");
+                Debug.WriteLine($"Cannot stop device {(device?.Name) ?? "N/A"}: Device is not operational, already idle, or communication failed.");
                 return;
             }
 
@@ -346,33 +373,36 @@ namespace SANJET.Core.ViewModels
             try
             {
                 _updateTimer.Stop();
-                Debug.WriteLine("Update timer stopped for ExecuteStop.");
+                Debug.WriteLine("Update timer stopped for ExecuteStopDeviceAsync.");
                 await _communicationService.WriteModbusAsync(device.IpAddress, device.SlaveId, _controlAddress, 0, 6);
-                await UpdateDeviceData();
+                await UpdateDeviceDataAsync(); // 立即更新一次狀態
 
-                // 播报设备停止
-                AnnounceDevice(device, StopAnnouncement);
+                AnnounceDevice(device, StopAnnouncement); // StopAnnouncement 是 [ObservableProperty]
+                // PlayAudioAnnouncement(StopAnnouncement); // 可選：停止時也播放音效
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"ExecuteStop failed: {ex.Message}");
+                Debug.WriteLine($"ExecuteStopDeviceAsync for {device.Name} failed: {ex.Message}");
                 device.Status = "停止失敗";
             }
             finally
             {
-                _updateTimer.Start();
-                Debug.WriteLine("Update timer restarted after ExecuteStop.");
+                if (CanControlDevice)
+                {
+                    _updateTimer.Start();
+                    Debug.WriteLine("Update timer restarted after ExecuteStopDeviceAsync.");
+                }
             }
         }
 
-        public void StopPolling()
+        public void StopPolling() // 這個方法由外部 (例如頁面 Unloaded 事件) 調用
         {
             _updateTimer.Stop();
-            _communicationService.CleanupConnections();
-            Debug.WriteLine("Update timer stopped and connections cleaned up due to page unload.");
+            _communicationService.CleanupConnections(); // 假設 ICommunicationService 有此方法
+            Debug.WriteLine("Update timer stopped and connections cleaned up.");
         }
 
-        public async void StartPolling()
+        public async void StartPolling() // 這個方法由外部 (例如頁面 Loaded 事件) 調用
         {
             if (!CanControlDevice)
             {
@@ -380,48 +410,44 @@ namespace SANJET.Core.ViewModels
                 return;
             }
 
-            Debug.WriteLine("StartPolling initiated due to page load.");
-            await UpdateDeviceData();
-            if (!_updateTimer.Enabled)
+            Debug.WriteLine("StartPolling initiated.");
+            await UpdateDeviceDataAsync();
+            if (!_updateTimer.Enabled) // 檢查 Timer 是否已啟用
             {
                 _updateTimer.Start();
-                Debug.WriteLine("Update timer started due to page load.");
+                Debug.WriteLine("Update timer started.");
             }
         }
 
-        private void ShowRecordWindow(int deviceIndex)
+        private void ShowRecordWindowForDevice(DeviceModel device)
         {
+            if (device == null)
+            {
+                Debug.WriteLine($"無效的設備實例");
+                MessageBox.Show("請選擇有效的設備", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
             try
             {
-                if (deviceIndex < 0 || deviceIndex >= Devices.Count)
-                {
-                    Debug.WriteLine($"無效的設備索引: {deviceIndex}");
-                    MessageBox.Show("請選擇有效的設備", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                var device = Devices[deviceIndex];
-
-                // 確保 device.Id 大於 0，這是資料庫中的 ID，不是集合索引
                 if (device.Id <= 0)
                 {
-                    Debug.WriteLine($"無效的設備 ID: {device.Id}，設備索引: {deviceIndex}");
+                    Debug.WriteLine($"無效的設備 ID: {device.Id}，設備名稱: {device.Name}");
                     MessageBox.Show($"設備 '{device.Name}' 的 ID 無效。請確保設備在資料庫中已正確設置 ID。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 var currentUser = _permissionService.CurrentUser?.Username ?? "DefaultUser";
                 Debug.WriteLine(
-                    $"ShowRecordWindow: " +
-                    $"DeviceIndex={deviceIndex}, " +
+                    $"ShowRecordWindowForDevice: " +
                     $"DeviceId={device.Id}, " +
                     $"DeviceName={device.Name}, " +
-                    $"Username={currentUser} ," +
-                    $"Runcount={device.RunCount}"
-                    );
+                    $"Username={currentUser}, " +
+                    $"Runcount={device.RunCount}");
 
-                var (deviceId, deviceName, username, runcount) = _recorddialogService.ShowRecordDialog(device.Id, device.Name, currentUser,device.RunCount);
-                Debug.WriteLine($"記錄視窗返回: 設備名稱={deviceName}, 使用者名稱={username}, 設備ID={deviceId}, 跑和={runcount}" );
+                // IRecordDialogService 的 ShowRecordDialog 應返回一個 Tuple 或特定結果對象
+                var dialogResult = _recorddialogService.ShowRecordDialog(device.Id, device.Name, currentUser, device.RunCount);
+                // 根據 dialogResult 處理後續邏輯 (如果需要)
+                Debug.WriteLine($"記錄視窗調用完成，設備名稱={dialogResult.deviceName}, 使用者名稱={dialogResult.username}, 設備ID={dialogResult.deviceId}, 跑和={dialogResult.runcount}");
             }
             catch (Exception ex)
             {

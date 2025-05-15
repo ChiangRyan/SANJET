@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SANJET"
              xmlns:converters="clr-namespace:SANJET.UI.Converters"
-             StartupUri="UI/Views/Windows/MainWindow.xaml">
+             StartupUri="SANJET.UI/Views/Windows/MainWindow.xaml">
     <Application.Resources>
         <!-- 全局轉換器資源 -->
         <ResourceDictionary>
