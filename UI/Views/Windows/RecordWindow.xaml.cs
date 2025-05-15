@@ -1,7 +1,7 @@
 ﻿using System.Windows;
 using System.Diagnostics;
-using SANJET.SANJET.Core.ViewModels;
-using SANJET.SANJET.Core.Services;
+using SANJET.Core.ViewModels;
+using SANJET.Core.Services;
 
 namespace SANJET.UI.Views.Windows
 {

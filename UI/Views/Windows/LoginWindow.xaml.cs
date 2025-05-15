@@ -1,4 +1,4 @@
-﻿using SANJET.SANJET.Core.ViewModels;
+﻿using SANJET.Core.ViewModels;
 using System.Windows;
 using System.Windows.Controls;
 

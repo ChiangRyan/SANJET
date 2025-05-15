@@ -1,7 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
-using SANJET.SANJET.Core.ViewModels;
+using SANJET.Core.ViewModels;
 using System.Diagnostics;
 
 namespace SANJET.UI.Views.Pages
