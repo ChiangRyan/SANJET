@@ -6,7 +6,9 @@ namespace SANJET.UI.Views.Pages
     {
         public LoadingWindow()
         {
-            InitializeComponent();
+            InitializeComponent() ;
+
+
         }
     }
 }

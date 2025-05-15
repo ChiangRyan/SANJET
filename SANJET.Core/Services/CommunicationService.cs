@@ -2,7 +2,7 @@
 using SANJET.SANJET.Core.Models;
 using System.Net.Http;
 using System.Text.Json;
-
+using System.Diagnostics;
 
 
 namespace SANJET.SANJET.Core.Services
@@ -36,18 +36,18 @@ namespace SANJET.SANJET.Core.Services
                 }
                 catch (JsonException ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"JSON deserialization failed: {ex.Message}");
+                    Debug.WriteLine($"JSON deserialization failed: {ex.Message}");
                     return new ModbusReadResult { Status = "error", Message = "Invalid response format" };
                 }
             }
             catch (HttpRequestException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"HTTP request failed: {ex.Message}");
+                Debug.WriteLine($"HTTP request failed: {ex.Message}");
                 return new ModbusReadResult { Status = "error", Message = ex.Message };
             }
             catch (TaskCanceledException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Request timed out: {ex.Message}");
+                Debug.WriteLine($"Request timed out: {ex.Message}");
                 return new ModbusReadResult { Status = "error", Message = "Request timed out" };
             }
         }
@@ -63,12 +63,12 @@ namespace SANJET.SANJET.Core.Services
             }
             catch (HttpRequestException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"HTTP request failed: {ex.Message}");
+                Debug.WriteLine($"HTTP request failed: {ex.Message}");
                 return $"Error: {ex.Message}";
             }
             catch (TaskCanceledException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Request timed out: {ex.Message}");
+                Debug.WriteLine($"Request timed out: {ex.Message}");
                 return "Error: Request timed out";
             }
         }
@@ -84,12 +84,12 @@ namespace SANJET.SANJET.Core.Services
             }
             catch (HttpRequestException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"HTTP request failed: {ex.Message}");
+                Debug.WriteLine($"HTTP request failed: {ex.Message}");
                 return $"Error: {ex.Message}";
             }
             catch (TaskCanceledException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Request timed out: {ex.Message}");
+                Debug.WriteLine($"Request timed out: {ex.Message}");
                 return "Error: Request timed out";
             }
         }
@@ -99,7 +99,7 @@ namespace SANJET.SANJET.Core.Services
         {
             // 取消所有未完成的請求
             client.CancelPendingRequests();
-            System.Diagnostics.Debug.WriteLine("Pending HTTP requests canceled.");
+            Debug.WriteLine("Pending HTTP requests canceled.");
         }
 
         // 移除 Dispose 方法，因為靜態 HttpClient 不應被 Dispose

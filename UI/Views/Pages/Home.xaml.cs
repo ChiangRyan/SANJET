@@ -1,8 +1,8 @@
-﻿
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using SANJET.SANJET.Core.ViewModels;
+using System.Diagnostics;
 
 namespace SANJET.UI.Views.Pages
 {
@@ -25,7 +25,7 @@ namespace SANJET.UI.Views.Pages
         private void Home_Loaded(object sender, RoutedEventArgs e)
         {
             _viewModel.StartPolling();// 當頁面載入時，啟動輪巡（如果需要）
-            System.Diagnostics.Debug.WriteLine("Update timer started due to page load.");
+            Debug.WriteLine("Update timer started due to page load.");
         }
 
         private void Home_Unloaded(object sender, RoutedEventArgs e)

@@ -45,7 +45,7 @@ namespace SANJET.SANJET.Core.ViewModels
                 OnPropertyChanged(nameof(IsLoggedIn));
                 OnPropertyChanged(nameof(CanLogin));
                 OnPropertyChanged(nameof(CanLogout));
-                System.Diagnostics.Debug.WriteLine("PermissionsChanged event received.");
+                Debug.WriteLine("PermissionsChanged event received.");
             };
         }
 
@@ -62,7 +62,7 @@ namespace SANJET.SANJET.Core.ViewModels
                     OnPropertyChanged(nameof(CanLogout));
                     Username = string.Empty;
                     Password = string.Empty;
-                    System.Diagnostics.Debug.WriteLine($"Login successful, user: {_permissionService.CurrentUser.Username}");
+                    Debug.WriteLine($"Login successful, user: {_permissionService.CurrentUser.Username}");
                 }
                 else
                 {
@@ -89,7 +89,7 @@ namespace SANJET.SANJET.Core.ViewModels
             OnPropertyChanged(nameof(CanLogin));
             OnPropertyChanged(nameof(CanLogout));
             _loginDialogService.ClearNavigationSelection();
-            System.Diagnostics.Debug.WriteLine("Logout successful.");
+            Debug.WriteLine("Logout successful.");
         }
 
         [RelayCommand]
@@ -99,7 +99,7 @@ namespace SANJET.SANJET.Core.ViewModels
             try
             {
                 _mainFrame.Navigate(new Uri(viewUri, UriKind.Relative));
-                System.Diagnostics.Debug.WriteLine($"Navigated to: {viewUri}");
+                Debug.WriteLine($"Navigated to: {viewUri}");
             }
             catch (Exception ex)
             {
@@ -122,7 +122,7 @@ namespace SANJET.SANJET.Core.ViewModels
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"登入窗口錯誤: {ex.Message}");
+                Debug.WriteLine($"登入窗口錯誤: {ex.Message}");
             }
         }
 
@@ -135,13 +135,13 @@ namespace SANJET.SANJET.Core.ViewModels
             OnPropertyChanged(nameof(CanViewSettings));
             OnPropertyChanged(nameof(CanControlDevice));
             OnPropertyChanged(nameof(CanAll));
-            System.Diagnostics.Debug.WriteLine("Permission properties updated.");
+            Debug.WriteLine("Permission properties updated.");
         }
 
         public void NotifyPermissionsChanged()
         {
             UpdatePermissionProperties();
-            System.Diagnostics.Debug.WriteLine("NotifyPermissionsChanged called.");
+            Debug.WriteLine("NotifyPermissionsChanged called.");
         }
     }
 }
