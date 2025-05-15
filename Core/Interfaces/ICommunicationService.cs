@@ -1,4 +1,4 @@
-﻿using SANJET.SANJET.Core.Models;
+﻿using SANJET.Core.Models;
 
 namespace SANJET.Core.Interfaces
 {

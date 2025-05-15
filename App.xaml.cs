@@ -2,41 +2,41 @@
 using SQLitePCL;
 using System.Diagnostics;
 using System.Windows;
-using SANJET.SANJET.Core.Services;
+using SANJET.Core.Services;
 using SANJET.UI.Views.Pages;
-using SANJET.SANJET.Core.ViewModels;
-using SANJET.SANJET.Core.Interfaces;
-using SANJET.SANJET.Core.Tools;
-using SANJET.UI.Views.Windows;
+using SANJET.Core.ViewModels;
+using SANJET.Core.Interfaces;
+using SANJET.Core.Tools;
+
 
 
 namespace SANJET
 {
     public partial class App : Application
     {
-        public IServiceProvider ServiceProvider { get; private set; }
+        public IServiceProvider? ServiceProvider { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
             Debug.WriteLine("Entering OnStartup...");
             try
             {
-                Batteries.Init();
+                // 根據 Microsoft.Data.Sqlite 的文件，對於 .NET Core / .NET 5+，
+                // 通常不再需要手動呼叫 Batteries.Init()，除非有特定原因。
+                // 如果您的 SQLitePCL.raw 版本較舊或有特殊設定，可能仍需要。
+                // 建議測試移除它，看看是否仍然工作正常。
+                // SQLitePCL.Batteries.Init(); // 或更新為 Batteries_V2.Init();
 
-                Debug.WriteLine("SQLite provider initialized.");
+                Debug.WriteLine("SQLite provider initialized (if Batteries.Init was called).");
 
                 base.OnStartup(e);
-
                 Debug.WriteLine("base.OnStartup called successfully.");
 
                 var services = new ServiceCollection();
-
                 Debug.WriteLine("Adding services to DI container...");
 
                 ConfigureServices(services);
-
                 Debug.WriteLine("Services added to DI container.");
-
                 Debug.WriteLine("Building service provider...");
 
                 ServiceProvider = services.BuildServiceProvider();
@@ -45,13 +45,10 @@ namespace SANJET
 
                 var loadingWindow = new LoadingWindow();
                 loadingWindow.Show();
-
                 Debug.WriteLine("LoadingWindow shown.");
 
-                var dataService = ServiceProvider.GetService<SqliteDataService>();
-                if (dataService == null)
-                    throw new InvalidOperationException("SqliteDataService is null...");
-
+                // 使用 GetRequiredService 以確保服務存在，並處理可能的 null 情況
+                var dataService = ServiceProvider.GetRequiredService<SqliteDataService>();
                 string nasPath = @"\\192.168.88.3\電控工程課\107_姜集翔\SANJET\SJ_data.db";
                 Debug.WriteLine($"Checking NAS path accessibility: {nasPath}");
                 bool isNasAccessible = dataService.IsPathAccessible(nasPath);
@@ -119,45 +116,54 @@ namespace SANJET
             }
         }
 
-        
+
         private void ConfigureServices(IServiceCollection services)
         {
-            
+            // 註冊核心服務
             services.AddSingleton<ICommunicationService, CommunicationService>();
             services.AddSingleton<SqliteDataService>(provider => new SqliteDataService(insertTestData: true));
             services.AddSingleton<PermissionService>();
-            services.AddSingleton<ILoginDialogService, MainWindow>();
-
-            // Add TextToSpeech service registration
             services.AddSingleton<ITextToSpeechService, SpeechService>();
-            // Add AudioPlayer service registration
             services.AddSingleton<IAudioPlayerService, AudioPlayer>();
+            services.AddSingleton<IRecordDialogService, RecordService>(provider =>
+                new RecordService(provider.GetRequiredService<SqliteDataService>()));
 
-            services.AddSingleton<MainWindow>(provider =>
-                new MainWindow(provider.GetService<IServiceProvider>()));
+            // 註冊 MainWindow
+            // MainWindow 自身通常不需要在建構函式中注入 IServiceProvider，
+            // 除非有特殊需求。若無，保持其無參數建構函式。
+            services.AddSingleton<MainWindow>();
 
+            // 將已註冊的 MainWindow 實例同時作為 ILoginDialogService 的實現提供
+            services.AddSingleton<ILoginDialogService>(provider =>
+                provider.GetRequiredService<MainWindow>());
+
+            // 註冊 ViewModels
             services.AddSingleton<MainWindowViewModel>(provider =>
-                new MainWindowViewModel(
-                    provider.GetService<PermissionService>(),
-                    provider.GetService<MainWindow>().MainFrame,
-                    provider.GetService<MainWindow>()
-                ));
+            {
+                // 獲取已創建的 MainWindow 實例
+                var mainWindowInstance = provider.GetRequiredService<MainWindow>();
+                return new MainWindowViewModel(
+                    provider.GetRequiredService<PermissionService>(),
+                    mainWindowInstance.MainFrame, // 從 MainWindow 實例獲取 MainFrame
+                    mainWindowInstance  // mainWindowInstance 已實現 ILoginDialogService
+                );
+            });
 
             services.AddSingleton<HomeViewModel>(provider =>
                 new HomeViewModel(
-                    provider.GetService<ICommunicationService>(),
-                    provider.GetService<SqliteDataService>(),
-                    provider.GetService<IRecordDialogService>(),
-                    provider.GetService<PermissionService>(),
-                    provider.GetService<ITextToSpeechService>(), // Add TTS service
-                    provider.GetService<IAudioPlayerService>() // Add player service
+                    provider.GetRequiredService<ICommunicationService>(),
+                    provider.GetRequiredService<SqliteDataService>(),
+                    provider.GetRequiredService<IRecordDialogService>(),
+                    provider.GetRequiredService<PermissionService>(),
+                    provider.GetRequiredService<ITextToSpeechService>(),
+                    provider.GetRequiredService<IAudioPlayerService>()
                 ));
 
-            services.AddSingleton<IRecordDialogService, RecordService>(provider =>
-                new RecordService(provider.GetService<SqliteDataService>()));
+            // LoginViewModel 通常與 LoginWindow 關聯，如果 LoginWindow 是臨時創建的，
+            // LoginViewModel 可能不需要註冊為 Singleton，除非有特定共享需求。
+            // 如果 LoginViewModel 是由 LoginWindow 內部創建和使用的，則無需在此處註冊。
+        }
 
-         }
-        
 
         protected override void OnExit(ExitEventArgs e)
         {
