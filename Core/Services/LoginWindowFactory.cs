@@ -1,24 +1,27 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SANJET.Core.Interfaces;
 using SANJET.Core.ViewModels;
 using SANJET.UI.Views.Windows;
+using System;
 
 namespace SANJET.Core.Services
 {
     public class LoginWindowFactory : ILoginWindowFactory
     {
-        private readonly LoginViewModel _loginViewModel;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<LoginWindow> _logger;
 
-        public LoginWindowFactory(LoginViewModel loginViewModel, ILogger<LoginWindow> logger)
+        public LoginWindowFactory(IServiceProvider serviceProvider, ILogger<LoginWindow> logger)
         {
-            _loginViewModel = loginViewModel ?? throw new ArgumentNullException(nameof(loginViewModel));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public LoginWindow Create()
         {
-            return new LoginWindow(_loginViewModel, _logger);
+            var loginViewModel = _serviceProvider.GetRequiredService<LoginViewModel>();
+            return new LoginWindow(loginViewModel, _logger);
         }
     }
 }

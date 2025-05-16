@@ -23,7 +23,6 @@ namespace SANJET
             Debug.WriteLine("Entering OnStartup...");
             try
             {
-    
                 Debug.WriteLine("SQLite provider initialized (if Batteries.Init was called).");
 
                 base.OnStartup(e);
@@ -61,40 +60,58 @@ namespace SANJET
                     Debug.WriteLine($"NAS database path set: {nasPath}");
                 }
 
-                Dispatcher.Invoke(async () =>
+                // 修改：使用 BeginInvoke 並在外部等待任務完成
+                var initTask = Dispatcher.InvokeAsync(async () =>
                 {
-                    var mainWindow = ServiceProvider.GetService<MainWindow>();
-                    if (mainWindow == null)
-                        throw new InvalidOperationException("MainWindow is null...");
-                    mainWindow.DataContext = ServiceProvider.GetService<MainWindowViewModel>();
-                    Debug.WriteLine("MainWindow DataContext set.");
-
-                    await Task.Delay(2000);
-
-                    loadingWindow.Close();
-                    Debug.WriteLine("LoadingWindow closed.");
-
-                    if (!isNasAccessible)
+                    try
                     {
-                        MessageBox.Show(
-                            "無法連接 NAS 路徑: " + nasPath + "\n將使用本地路徑作為備用。",
-                            "連線錯誤",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning
-                        );
+                        var mainWindow = ServiceProvider.GetService<MainWindow>();
+                        if (mainWindow == null)
+                            throw new InvalidOperationException("MainWindow is null...");
+                        mainWindow.DataContext = ServiceProvider.GetService<MainWindowViewModel>();
+                        Debug.WriteLine("MainWindow DataContext set.");
+
+                        await Task.Delay(2000);
+                        Debug.WriteLine("Delay completed, closing LoadingWindow.");
+
+                        loadingWindow.Close();
+                        Debug.WriteLine("LoadingWindow closed.");
+
+                        if (!isNasAccessible)
+                        {
+                            MessageBox.Show(
+                                "無法連接 NAS 路徑: " + nasPath + "\n將使用本地路徑作為備用。",
+                                "連線錯誤",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning
+                            );
+                        }
+
+                        mainWindow.Show();
+                        Debug.WriteLine("MainWindow shown.");
+
+                        var viewModel = mainWindow.DataContext as MainWindowViewModel;
+                        if (viewModel != null && !viewModel.IsLoggedIn)
+                        {
+                            Debug.WriteLine("Showing LoginWindow from App.OnStartup");
+                            viewModel.ShowLogin();
+                        }
                     }
-
-                    mainWindow.Show();
-                    Debug.WriteLine("MainWindow shown.");
-
-                    var viewModel = mainWindow.DataContext as MainWindowViewModel;
-                    if (viewModel != null && !viewModel.IsLoggedIn)
+                    catch (Exception ex)
                     {
-                        Debug.WriteLine("Showing LoginWindow from App.OnStartup");
-                        viewModel.ShowLogin();
+                        Debug.WriteLine($"UI initialization failed: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                        MessageBox.Show(
+                            $"UI 初始化失敗：{ex.Message}\n\n詳細資訊：{ex}",
+                            "錯誤",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error
+                        );
+                        Shutdown();
                     }
                 });
 
+                // 等待初始化完成
+                initTask.Task.Wait();
                 Debug.WriteLine("Application startup completed.");
             }
             catch (Exception ex)
@@ -129,7 +146,6 @@ namespace SANJET
                 provider.GetRequiredService<ILogger<PermissionService>>()
             ));
             services.AddSingleton<ITextToSpeechService, SpeechService>();
-
             services.AddSingleton<IAudioPlayerService, AudioPlayerService>(provider => new AudioPlayerService(
                 provider.GetRequiredService<ILogger<AudioPlayerService>>()
             ));
@@ -143,6 +159,7 @@ namespace SANJET
                 provider.GetRequiredService<ILogger<LoginDialogService>>()
             ));
 
+            services.AddSingleton<MainWindow>();
             services.AddSingleton<MainWindowViewModel>(provider => new MainWindowViewModel(
                 provider.GetRequiredService<PermissionService>(),
                 provider.GetRequiredService<MainWindow>().MainFrame,
@@ -152,27 +169,13 @@ namespace SANJET
                 provider
             ));
 
-            services.AddSingleton<HomeViewModel>(provider => new HomeViewModel(
-                provider.GetRequiredService<ICommunicationService>(),
-                provider.GetRequiredService<SqliteDataService>(),
-                provider.GetRequiredService<IRecordDialogService>(),
-                provider.GetRequiredService<PermissionService>(),
-                provider.GetRequiredService<ITextToSpeechService>(),
-                provider.GetRequiredService<IAudioPlayerService>(),
-                provider.GetRequiredService<ILogger<HomeViewModel>>()
-            ));
-
-            services.AddSingleton<MainWindow>(provider => new MainWindow(
-                provider,
-                provider.GetRequiredService<MainWindowViewModel>(),
-                provider.GetRequiredService<ILogger<MainWindow>>()
-            ));
-
+            services.AddSingleton<HomeViewModel>();
             services.AddSingleton<Home>(provider => new Home(
                 provider,
                 provider.GetRequiredService<ILogger<Home>>()
             ));
         }
+
 
         protected override void OnExit(ExitEventArgs e)
         {

@@ -200,18 +200,7 @@ namespace SANJET.Core.ViewModels
         }
         */
 
-        public async Task StartPollingAsync()
-        {
-            try
-            {
-                _logger.LogInformation("Starting polling in MainWindowViewModel...");
-                await _homeViewModel.StartPollingAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to start polling.");
-            }
-        }
+
 
         private void UpdatePermissionProperties()
         {

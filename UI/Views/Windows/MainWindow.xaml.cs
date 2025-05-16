@@ -17,6 +17,7 @@ namespace SANJET.UI.Views.Windows
 
         public MainWindow(IServiceProvider serviceProvider, MainWindowViewModel viewModel, ILogger<MainWindow> logger)
         {
+
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -28,9 +29,10 @@ namespace SANJET.UI.Views.Windows
 
             Loaded += MainWindow_Loaded;
             _logger.LogInformation("MainWindow created.");
+
         }
 
-        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -39,7 +41,6 @@ namespace SANJET.UI.Views.Windows
                     _logger.LogInformation("Showing LoginWindow from MainWindow.Loaded");
                     _viewModel.ShowLogin();
                 }
-                await _viewModel.StartPollingAsync();
             }
             catch (Exception ex)
             {
