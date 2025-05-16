@@ -1,46 +1,49 @@
 ﻿using System;
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using SANJET.Core.Constants.Enums;
 using SANJET.Core.Models;
-using SANJET.Core.Services;
-
 
 namespace SANJET.Core.Services
 {
     public class PermissionService
     {
         private readonly SqliteDataService _dbService;
-        private User _currentUser;
+        private readonly ILogger<PermissionService> _logger;
+        private User? _currentUser;
 
-        public event EventHandler PermissionsChanged;
+        public event EventHandler? PermissionsChanged;
 
-        public PermissionService(SqliteDataService dbService)
+        public PermissionService(SqliteDataService dbService, ILogger<PermissionService> logger)
         {
             _dbService = dbService ?? throw new ArgumentNullException(nameof(dbService));
-            Debug.WriteLine("PermissionService initialized.");
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _logger.LogInformation("PermissionService initialized.");
         }
 
         public bool IsLoggedIn => _currentUser != null;
 
+        public User? CurrentUser => _currentUser;
+
         public bool Login(string username, string password)
         {
-            Debug.WriteLine($"Attempting to login with username: {username}, password: {password}");
+            _logger.LogInformation("Attempting to login with username: {Username}", username);
             try
             {
                 var user = _dbService.GetUserWithPermissions(username, password);
                 if (user != null)
                 {
                     _currentUser = user;
-                    Debug.WriteLine($"Login successful for user: {username} with permissions: {string.Join(", ", _currentUser.Permissions)}");
+                    _logger.LogInformation("Login successful for user: {Username} with permissions: {Permissions}",
+                        username, string.Join(", ", _currentUser.Permissions));
                     PermissionsChanged?.Invoke(this, EventArgs.Empty);
                     return true;
                 }
-                Debug.WriteLine($"Login failed for user: {username} - No matching user found.");
+                _logger.LogWarning("Login failed for user: {Username} - No matching user found.", username);
                 return false;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Login failed for user: {username} - Exception: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                _logger.LogError(ex, "Login failed for user: {Username}", username);
                 return false;
             }
         }
@@ -49,23 +52,21 @@ namespace SANJET.Core.Services
         {
             if (_currentUser == null)
             {
-                Debug.WriteLine("No user logged in, permission check failed.");
+                _logger.LogDebug("No user logged in, permission check for {Permission} failed.", permission);
                 return false;
             }
 
             string permissionName = permission.ToString();
             bool hasPermission = _currentUser.Permissions.Contains(permissionName);
-            Debug.WriteLine($"Permission check for {permissionName}: {hasPermission}");
+            _logger.LogDebug("Permission check for {Permission}: {HasPermission}", permissionName, hasPermission);
             return hasPermission;
         }
 
         public void Logout()
         {
             _currentUser = null;
-            Debug.WriteLine("User logged out.");
+            _logger.LogInformation("User logged out.");
             PermissionsChanged?.Invoke(this, EventArgs.Empty);
         }
-
-        public User CurrentUser => _currentUser;
     }
 }

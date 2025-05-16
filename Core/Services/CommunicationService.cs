@@ -30,8 +30,15 @@ namespace SANJET.Core.Services
                 try
                 {
                     var modbusResult = JsonSerializer.Deserialize<ModbusReadResult>(responseBody);
-                    modbusResult.Timestamp = DateTime.Now;
-                    return modbusResult;
+                    if (modbusResult != null) // 確保 modbusResult 不為 null
+                    {
+                        modbusResult.Timestamp = DateTime.Now;
+                        return modbusResult;
+                    }
+                    else
+                    {
+                        return new ModbusReadResult { Status = "error", Message = "Deserialization returned null" };
+                    }
                 }
                 catch (JsonException ex)
                 {

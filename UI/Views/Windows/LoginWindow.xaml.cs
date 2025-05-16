@@ -1,4 +1,6 @@
-﻿using SANJET.Core.ViewModels;
+﻿using Microsoft.Extensions.Logging;
+using SANJET.Core.ViewModels;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -6,20 +8,32 @@ namespace SANJET.UI.Views.Windows
 {
     public partial class LoginWindow : Window
     {
-        public string Username => (DataContext as LoginViewModel)?.Username;
-        public string Password => (DataContext as LoginViewModel)?.Password;
+        private readonly ILogger<LoginWindow> _logger;
 
-        public LoginWindow()
+        public string? Username => (DataContext as LoginViewModel)?.Username;
+        public string? Password => (DataContext as LoginViewModel)?.Password;
+
+        public LoginWindow(LoginViewModel viewModel, ILogger<LoginWindow> logger)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             InitializeComponent();
-            DataContext = new LoginViewModel(this);
+            DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            _logger.LogInformation("LoginWindow initialized.");
         }
 
         private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
         {
-            if (DataContext is LoginViewModel viewModel)
+            try
             {
-                viewModel.Password = (sender as PasswordBox)?.Password;
+                if (sender is PasswordBox passwordBox && DataContext is LoginViewModel viewModel)
+                {
+                    viewModel.Password = passwordBox.Password ?? string.Empty;
+                    _logger.LogDebug("PasswordBox updated in LoginWindow.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update PasswordBox.");
             }
         }
     }

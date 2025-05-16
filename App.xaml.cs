@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SQLitePCL;
+using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using SANJET.Core.Services;
 using SANJET.UI.Views.Pages;
@@ -9,8 +11,6 @@ using SANJET.Core.ViewModels;
 using SANJET.Core.Interfaces;
 using SANJET.Core.Tools;
 using SANJET.UI.Views.Windows;
-using Microsoft.Extensions.Logging.Console;
-using Microsoft.Extensions.Logging.Debug;
 
 namespace SANJET
 {
@@ -18,42 +18,37 @@ namespace SANJET
     {
         public IServiceProvider? ServiceProvider { get; private set; }
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             Debug.WriteLine("Entering OnStartup...");
             try
             {
-                // 根據 Microsoft.Data.Sqlite 的文件，對於 .NET Core / .NET 5+，
-                // 通常不再需要手動呼叫 Batteries.Init()，除非有特定原因。
-                // 如果您的 SQLitePCL.raw 版本較舊或有特殊設定，可能仍需要。
-                // 建議測試移除它，看看是否仍然工作正常。
-                // SQLitePCL.Batteries.Init(); // 或更新為 Batteries_V2.Init();
-
-                Debug.WriteLine("SQLite provider initialized (if Batteries.Init was called).");
+                // 移除 Batteries.Init()，除非必要
+                // SQLitePCL.Batteries.Init();
+                Debug.WriteLine("SQLite provider initialized.");
 
                 base.OnStartup(e);
                 Debug.WriteLine("base.OnStartup called successfully.");
 
                 var services = new ServiceCollection();
                 Debug.WriteLine("Adding services to DI container...");
-
                 ConfigureServices(services);
                 Debug.WriteLine("Services added to DI container.");
                 Debug.WriteLine("Building service provider...");
 
                 ServiceProvider = services.BuildServiceProvider();
-
                 Debug.WriteLine("Service provider built successfully.");
 
                 var loadingWindow = new LoadingWindow();
                 loadingWindow.Show();
                 Debug.WriteLine("LoadingWindow shown.");
 
-                // 使用 GetRequiredService 以確保服務存在，並處理可能的 null 情況
                 var dataService = ServiceProvider.GetRequiredService<SqliteDataService>();
                 string nasPath = @"\\192.168.88.3\電控工程課\107_姜集翔\SANJET\SJ_data.db";
                 Debug.WriteLine($"Checking NAS path accessibility: {nasPath}");
-                bool isNasAccessible = SqliteDataService.IsPathAccessible(nasPath);
+
+                // 非同步檢查 NAS 路徑
+                bool isNasAccessible = await Task.Run(() => SqliteDataService.IsPathAccessible(nasPath));
                 if (!isNasAccessible)
                 {
                     Debug.WriteLine($"NAS path {nasPath} is not accessible. Switching to local path.");
@@ -66,16 +61,38 @@ namespace SANJET
                     Debug.WriteLine($"NAS database path set: {nasPath}");
                 }
 
-                Dispatcher.Invoke(async () =>
+                // 將 UI 邏輯移到非同步方法
+                await InitializeMainWindowAsync(loadingWindow, isNasAccessible, nasPath);
+                Debug.WriteLine("Application startup completed.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Application startup failed: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                await Dispatcher.InvokeAsync(() =>
                 {
-                    var mainWindow = ServiceProvider.GetService<MainWindow>();
-                    if (mainWindow == null)
-                        throw new InvalidOperationException("MainWindow is null...");
-                    mainWindow.DataContext = ServiceProvider.GetService<MainWindowViewModel>();
-                    Debug.WriteLine("MainWindow DataContext set.");
+                    MessageBox.Show(
+                        $"應用程式啟動失敗：{ex.Message}\n\n詳細資訊：{ex}",
+                        "錯誤",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
+                    Shutdown();
+                });
+            }
+        }
 
-                    await Task.Delay(2000);
+        private async Task InitializeMainWindowAsync(Window loadingWindow, bool isNasAccessible, string nasPath)
+        {
+            try
+            {
+                var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
+                mainWindow.DataContext = ServiceProvider.GetRequiredService<MainWindowViewModel>();
+                Debug.WriteLine("MainWindow DataContext set.");
 
+                await Task.Delay(2000); // 模擬載入延遲
+
+                await Dispatcher.InvokeAsync(() =>
+                {
                     loadingWindow.Close();
                     Debug.WriteLine("LoadingWindow closed.");
 
@@ -91,24 +108,22 @@ namespace SANJET
 
                     mainWindow.Show();
                     Debug.WriteLine("MainWindow shown.");
-
-                    var viewModel = mainWindow.DataContext as MainWindowViewModel;
-                    if (viewModel != null && !viewModel.IsLoggedIn)
-                    {
-                        Debug.WriteLine("Showing LoginWindow from App.OnStartup");
-                        viewModel.ShowLogin();
-                    }
                 });
 
-                Debug.WriteLine("Application startup completed.");
+                var viewModel = mainWindow.DataContext as MainWindowViewModel;
+                if (viewModel != null && !viewModel.IsLoggedIn)
+                {
+                    Debug.WriteLine("Showing LoginWindow from App.OnStartup");
+                    await Dispatcher.InvokeAsync(() => viewModel.ShowLogin());
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Application startup failed: {ex.Message}\nStackTrace: {ex.StackTrace}");
-                Dispatcher.Invoke(() =>
+                Debug.WriteLine($"InitializeMainWindowAsync failed: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                await Dispatcher.InvokeAsync(() =>
                 {
                     MessageBox.Show(
-                        $"應用程式啟動失敗：{ex.Message}\n\n詳細資訊：{ex}",
+                        $"初始化主視窗失敗：{ex.Message}\n\n詳細資訊：{ex}",
                         "錯誤",
                         MessageBoxButton.OK,
                         MessageBoxImage.Error
@@ -118,34 +133,43 @@ namespace SANJET
             }
         }
 
-
         private void ConfigureServices(IServiceCollection services)
         {
-            // 配置日誌
             services.AddLogging(logging =>
             {
                 logging.AddConsole();
                 logging.AddDebug();
             });
 
-            // 註冊核心服務
             services.AddSingleton<ICommunicationService, CommunicationService>();
             services.AddSingleton<SqliteDataService>(provider => new SqliteDataService(insertTestData: true));
-            services.AddSingleton<PermissionService>();
+            services.AddSingleton<PermissionService>(provider => new PermissionService(
+                provider.GetRequiredService<SqliteDataService>(),
+                provider.GetRequiredService<ILogger<PermissionService>>()
+            ));
             services.AddSingleton<ITextToSpeechService, SpeechService>();
-            services.AddSingleton<IAudioPlayerService, AudioPlayer>();
+            services.AddSingleton<IAudioPlayerService, AudioPlayerService>(provider => new AudioPlayerService(
+                provider.GetRequiredService<ILogger<AudioPlayerService>>()
+            ));
             services.AddSingleton<IRecordDialogService, RecordService>(provider =>
                 new RecordService(provider.GetRequiredService<SqliteDataService>()));
 
-            // 註冊 LoginDialogService
-            services.AddSingleton<ILoginDialogService, LoginDialogService>();
+            services.AddSingleton<LoginViewModel>();
+            services.AddSingleton<ILoginWindowFactory, LoginWindowFactory>();
+            services.AddSingleton<ILoginDialogService>(provider => new LoginDialogService(
+                provider.GetRequiredService<ILoginWindowFactory>(),
+                provider.GetRequiredService<ILogger<LoginDialogService>>()
+            ));
 
-            // 註冊 ViewModels
+            // 修改 MainWindow 和 MainWindowViewModel 的註冊，避免循環依賴
+            services.AddSingleton<MainWindow>();
             services.AddSingleton<MainWindowViewModel>(provider => new MainWindowViewModel(
                 provider.GetRequiredService<PermissionService>(),
                 provider.GetRequiredService<MainWindow>().MainFrame,
-                provider.GetRequiredService<ILoginDialogService>()
-
+                provider.GetRequiredService<ILoginDialogService>(),
+                provider.GetRequiredService<HomeViewModel>(),
+                provider.GetRequiredService<ILogger<MainWindowViewModel>>(),
+                provider
             ));
 
             services.AddSingleton<HomeViewModel>(provider => new HomeViewModel(
@@ -158,14 +182,6 @@ namespace SANJET
                 provider.GetRequiredService<ILogger<HomeViewModel>>()
             ));
 
-            // 註冊 MainWindow
-            services.AddSingleton<MainWindow>(provider => new MainWindow(
-                provider,
-                provider.GetRequiredService<MainWindowViewModel>(),
-                provider.GetRequiredService<ILogger<MainWindow>>()
-            ));
-
-            // 註冊 Home 頁面
             services.AddSingleton<Home>(provider => new Home(
                 provider,
                 provider.GetRequiredService<ILogger<Home>>()
