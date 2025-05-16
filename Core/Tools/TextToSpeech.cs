@@ -1,4 +1,5 @@
 ﻿using SANJET.Core.Interfaces;
+using System.Speech.Synthesis;
 
 namespace SANJET.Core.Tools
 {

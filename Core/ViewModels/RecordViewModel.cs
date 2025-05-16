@@ -184,6 +184,7 @@ namespace SANJET.Core.ViewModels
         }
 
         [RelayCommand(CanExecute = nameof(CanExportToExcel))]
+        [Obsolete]
         private void ExportToExcel()
         {
             try

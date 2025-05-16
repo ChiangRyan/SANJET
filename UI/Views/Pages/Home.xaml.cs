@@ -2,35 +2,40 @@
 using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using SANJET.Core.ViewModels;
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace SANJET.UI.Views.Pages
 {
     public partial class Home : Page
     {
         private readonly HomeViewModel _viewModel;
+        private readonly ILogger<Home> _logger;
 
-        public Home()
+        public Home(IServiceProvider serviceProvider, ILogger<Home> logger)
         {
             InitializeComponent();
 
-            var app = (App)Application.Current;
-            _viewModel = app.ServiceProvider.GetService<HomeViewModel>();
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _viewModel = serviceProvider.GetRequiredService<HomeViewModel>()
+                ?? throw new ArgumentNullException(nameof(serviceProvider));
             DataContext = _viewModel;
 
             Loaded += Home_Loaded;
             Unloaded += Home_Unloaded;
+
+            _logger.LogInformation("Home page initialized.");
         }
 
-        private void Home_Loaded(object sender, RoutedEventArgs e)
+        private async void Home_Loaded(object sender, RoutedEventArgs e)
         {
-            _viewModel.StartPolling();// 當頁面載入時，啟動輪巡（如果需要）
-            Debug.WriteLine("Update timer started due to page load.");
+            await _viewModel.StartPollingAsync();
+            _logger.LogInformation("Update timer started due to page load.");
         }
 
         private void Home_Unloaded(object sender, RoutedEventArgs e)
         {
             _viewModel.StopPolling();
+            _logger.LogInformation("Update timer stopped due to page unload.");
         }
     }
 }

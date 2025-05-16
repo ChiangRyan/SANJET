@@ -1,122 +1,68 @@
-﻿using System.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System.Net;
 using System.Windows.Input;
+using System.Xml.Linq;
 
 namespace SANJET.Core.Models
 {
-    public class DeviceDataChangedEventArgs : System.EventArgs
+    public class DeviceDataChangedEventArgs : EventArgs
     {
-        public string Name { get; set; }
-        public string IpAddress { get; set; }
+        public string? Name { get; set; }
+        public string? IpAddress { get; set; }
         public int SlaveId { get; set; }
         public int RunCount { get; set; }
         public bool IsOperational { get; set; }
     }
-    
-    public class DeviceModel : INotifyPropertyChanged
-    {
-        public int Id { get; set; }
 
+    public partial class DeviceModel : ObservableObject
+    {
+        public int Id { get; private set; }
+
+        [ObservableProperty]
         private string _name;
+
+        [ObservableProperty]
         private string _ipAddress;
+
+        [ObservableProperty]
         private int _slaveId;
+
+        [ObservableProperty]
         private int _runCount;
+
+        [ObservableProperty]
         private string _status;
+
+        [ObservableProperty]
         private bool _isOperational;
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        public event System.EventHandler<DeviceDataChangedEventArgs> DataChanged;
+        [ObservableProperty]
+        private ICommand? _startCommand;
 
-        public string Name
+        [ObservableProperty]
+        private ICommand? _stopCommand;
+
+        [ObservableProperty]
+        private ICommand? _recordCommand;
+
+        public event EventHandler<DeviceDataChangedEventArgs>? DataChanged;
+
+        public DeviceModel(int id, string initialName, string initialIpAddress, int initialSlaveId, bool initialIsOperational = false, int initialRunCount = 0, string initialStatus = "未知")
         {
-            get => _name;
-            set
-            {
-                if (_name != value)
-                {
-                    _name = value;
-                    OnPropertyChanged(nameof(Name));
-                    NotifyDataChanged();
-                }
-            }
+            Id = id;
+            _name = initialName;
+            _ipAddress = initialIpAddress;
+            _slaveId = initialSlaveId;
+            _runCount = initialRunCount;
+            _status = initialStatus;
+            _isOperational = initialIsOperational;
         }
 
-        public string IpAddress
-        {
-            get => _ipAddress;
-            set
-            {
-                if (_ipAddress != value)
-                {
-                    _ipAddress = value;
-                    OnPropertyChanged(nameof(IpAddress));
-                    NotifyDataChanged();
-                }
-            }
-        }
-
-        public int SlaveId
-        {
-            get => _slaveId;
-            set
-            {
-                if (_slaveId != value)
-                {
-                    _slaveId = value;
-                    OnPropertyChanged(nameof(SlaveId));
-                    NotifyDataChanged();
-                }
-            }
-        }
-
-        public int RunCount
-        {
-            get => _runCount;
-            set
-            {
-                if (_runCount != value)
-                {
-                    _runCount = value;
-                    OnPropertyChanged(nameof(RunCount));
-                    NotifyDataChanged();
-                }
-            }
-        }
-
-        public string Status
-        {
-            get => _status;
-            set
-            {
-                if (_status != value)
-                {
-                    _status = value;
-                    OnPropertyChanged(nameof(Status));
-                }
-            }
-        }
-
-        public bool IsOperational
-        {
-            get => _isOperational;
-            set
-            {
-                if (_isOperational != value)
-                {
-                    _isOperational = value;
-                    OnPropertyChanged(nameof(IsOperational));
-                    NotifyDataChanged();
-                }
-            }
-        }
-
-        public ICommand StartCommand { get; set; }
-        public ICommand StopCommand { get; set; }
-        public ICommand RecordCommand { get; set; }
-
-        protected void OnPropertyChanged(string propertyName)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+        partial void OnNameChanged(string value) => NotifyDataChanged();
+        partial void OnIpAddressChanged(string value) => NotifyDataChanged();
+        partial void OnSlaveIdChanged(int value) => NotifyDataChanged();
+        partial void OnRunCountChanged(int value) => NotifyDataChanged();
+        partial void OnIsOperationalChanged(bool value) => NotifyDataChanged();
 
         private void NotifyDataChanged()
         {

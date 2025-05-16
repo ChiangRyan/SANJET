@@ -1,119 +1,69 @@
-﻿using System;
-using System.Windows;
-using System.Diagnostics;
+﻿using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using SANJET.Core.Interfaces;
-using SANJET.Core.Services;
 using SANJET.Core.ViewModels;
 using SANJET.UI.Views.Pages;
+using Microsoft.Extensions.Logging;
+using System.Windows.Controls;
 
 namespace SANJET.UI.Views.Windows
 {
-    public partial class MainWindow : Window, ILoginDialogService
+    public partial class MainWindow : Window
     {
+        private readonly MainWindowViewModel _viewModel;
+        private readonly ILogger<MainWindow> _logger;
         private readonly IServiceProvider _serviceProvider;
-        private readonly MainWindowViewModel _viewModel; // 宣告為類欄位
-        private Home _homePage;
+        private Home? _homePage;
 
-        public MainWindow(IServiceProvider serviceProvider)
+        public Frame MainFrame { get; private set; }
+
+        public MainWindow(IServiceProvider serviceProvider, MainWindowViewModel viewModel, ILogger<MainWindow> logger)
         {
-            Debug.WriteLine("Creating MainWindow...");
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _logger.LogInformation("Creating MainWindow...");
             InitializeComponent();
+            MainFrame = this.MainContentFrame;
+            DataContext = _viewModel;
+            _logger.LogInformation("MainWindow DataContext set to: {ViewModelType}", _viewModel.GetType().Name);
 
-            // 從 App.xaml.cs 獲取 IServiceProvider
-            _serviceProvider = (App.Current as App)?.ServiceProvider;
-            if (_serviceProvider == null)
-            {
-                throw new InvalidOperationException("ServiceProvider is not initialized.");
-            }
-
-            var permissionService = _serviceProvider.GetService<PermissionService>();
-            if (permissionService == null)
-            {
-                throw new InvalidOperationException("PermissionService is not registered.");
-            }
-
-            _viewModel = new MainWindowViewModel(permissionService, this.MainFrame, this);
-            this.DataContext = _viewModel;
-            Debug.WriteLine($"MainWindow DataContext set to: {_viewModel.GetType().Name}");
-
-            // 手動觸發屬性更新
-            if (_viewModel is MainWindowViewModel vm)
-            {
-                vm.NotifyPermissionsChanged();
-            }
-
-            // 創建 Home 頁面並設置 DataContext
-            _homePage = new Home
-            {
-                DataContext = _serviceProvider.GetService<HomeViewModel>()
-            };
-
-            this.Loaded += (s, e) =>
-            {
-                if (!_viewModel.IsLoggedIn)
-                {
-                    Debug.WriteLine("Showing LoginWindow from MainWindow.Loaded");
-                    //_viewModel.ExecuteShowLogin();
-                }
-            };
-
-            Debug.WriteLine("MainWindow created.");
-
+            Loaded += MainWindow_Loaded;
+            _logger.LogInformation("MainWindow created.");
         }
 
-        public void ClearNavigationSelection()
+        private void InitializeHomePage()
         {
-            // 直接引用已知的導航按鈕並取消選中
-            HomeButton.IsChecked = false;
-
-            // 清空主框架
-            MainFrame.Content = null;
+            _homePage = _serviceProvider.GetRequiredService<Home>();
         }
 
-        public (bool Success, string Username, string Password) ShowLoginDialog()
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("ShowLoginDialog() called.");
-            var loginWindow = new LoginWindow();
-            if (this.IsVisible)
+            if (!_viewModel.IsLoggedIn)
             {
-                loginWindow.Owner = this;
+                _logger.LogInformation("Showing LoginWindow from MainWindow.Loaded");
+                _viewModel.ShowLogin();
             }
-            bool? result = loginWindow.ShowDialog();
-            Debug.WriteLine($"LoginWindow dialog result: {result}");
-            // 僅在 DialogResult 為 true 時返回數據
-            if (result == true)
-            {
-                return (true, loginWindow.Username, loginWindow.Password);
-            }
-            return (false, string.Empty, string.Empty);
+            await _viewModel.StartPollingAsync();
         }
 
-        // 首頁
         private void HomeButton_Checked(object sender, RoutedEventArgs e)
         {
             if (_homePage == null)
             {
-                _homePage = new Home
-                {
-                    DataContext = _serviceProvider.GetService<HomeViewModel>()
-                };
+                InitializeHomePage();
             }
             MainFrame.Navigate(_homePage);
+            _viewModel.IsHomeSelected = true;
         }
 
-
-        // 最小化窗口
         private void MinimizeButton_Click(object sender, RoutedEventArgs e)
         {
-            this.WindowState = WindowState.Minimized;
+            WindowState = WindowState.Minimized;
         }
 
-        // 關閉窗口
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            this.Close();
+            Close();
         }
-
     }
 }

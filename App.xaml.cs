@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SQLitePCL;
 using System.Diagnostics;
 using System.Windows;
@@ -7,8 +8,9 @@ using SANJET.UI.Views.Pages;
 using SANJET.Core.ViewModels;
 using SANJET.Core.Interfaces;
 using SANJET.Core.Tools;
-
-
+using SANJET.UI.Views.Windows;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Logging.Debug;
 
 namespace SANJET
 {
@@ -51,7 +53,7 @@ namespace SANJET
                 var dataService = ServiceProvider.GetRequiredService<SqliteDataService>();
                 string nasPath = @"\\192.168.88.3\電控工程課\107_姜集翔\SANJET\SJ_data.db";
                 Debug.WriteLine($"Checking NAS path accessibility: {nasPath}");
-                bool isNasAccessible = dataService.IsPathAccessible(nasPath);
+                bool isNasAccessible = SqliteDataService.IsPathAccessible(nasPath);
                 if (!isNasAccessible)
                 {
                     Debug.WriteLine($"NAS path {nasPath} is not accessible. Switching to local path.");
@@ -119,6 +121,13 @@ namespace SANJET
 
         private void ConfigureServices(IServiceCollection services)
         {
+            // 配置日誌
+            services.AddLogging(logging =>
+            {
+                logging.AddConsole();
+                logging.AddDebug();
+            });
+
             // 註冊核心服務
             services.AddSingleton<ICommunicationService, CommunicationService>();
             services.AddSingleton<SqliteDataService>(provider => new SqliteDataService(insertTestData: true));
@@ -128,42 +137,40 @@ namespace SANJET
             services.AddSingleton<IRecordDialogService, RecordService>(provider =>
                 new RecordService(provider.GetRequiredService<SqliteDataService>()));
 
-            // 註冊 MainWindow
-            // MainWindow 自身通常不需要在建構函式中注入 IServiceProvider，
-            // 除非有特殊需求。若無，保持其無參數建構函式。
-            services.AddSingleton<MainWindow>();
-
-            // 將已註冊的 MainWindow 實例同時作為 ILoginDialogService 的實現提供
-            services.AddSingleton<ILoginDialogService>(provider =>
-                provider.GetRequiredService<MainWindow>());
+            // 註冊 LoginDialogService
+            services.AddSingleton<ILoginDialogService, LoginDialogService>();
 
             // 註冊 ViewModels
-            services.AddSingleton<MainWindowViewModel>(provider =>
-            {
-                // 獲取已創建的 MainWindow 實例
-                var mainWindowInstance = provider.GetRequiredService<MainWindow>();
-                return new MainWindowViewModel(
-                    provider.GetRequiredService<PermissionService>(),
-                    mainWindowInstance.MainFrame, // 從 MainWindow 實例獲取 MainFrame
-                    mainWindowInstance  // mainWindowInstance 已實現 ILoginDialogService
-                );
-            });
+            services.AddSingleton<MainWindowViewModel>(provider => new MainWindowViewModel(
+                provider.GetRequiredService<PermissionService>(),
+                provider.GetRequiredService<MainWindow>().MainFrame,
+                provider.GetRequiredService<ILoginDialogService>()
 
-            services.AddSingleton<HomeViewModel>(provider =>
-                new HomeViewModel(
-                    provider.GetRequiredService<ICommunicationService>(),
-                    provider.GetRequiredService<SqliteDataService>(),
-                    provider.GetRequiredService<IRecordDialogService>(),
-                    provider.GetRequiredService<PermissionService>(),
-                    provider.GetRequiredService<ITextToSpeechService>(),
-                    provider.GetRequiredService<IAudioPlayerService>()
-                ));
+            ));
 
-            // LoginViewModel 通常與 LoginWindow 關聯，如果 LoginWindow 是臨時創建的，
-            // LoginViewModel 可能不需要註冊為 Singleton，除非有特定共享需求。
-            // 如果 LoginViewModel 是由 LoginWindow 內部創建和使用的，則無需在此處註冊。
+            services.AddSingleton<HomeViewModel>(provider => new HomeViewModel(
+                provider.GetRequiredService<ICommunicationService>(),
+                provider.GetRequiredService<SqliteDataService>(),
+                provider.GetRequiredService<IRecordDialogService>(),
+                provider.GetRequiredService<PermissionService>(),
+                provider.GetRequiredService<ITextToSpeechService>(),
+                provider.GetRequiredService<IAudioPlayerService>(),
+                provider.GetRequiredService<ILogger<HomeViewModel>>()
+            ));
+
+            // 註冊 MainWindow
+            services.AddSingleton<MainWindow>(provider => new MainWindow(
+                provider,
+                provider.GetRequiredService<MainWindowViewModel>(),
+                provider.GetRequiredService<ILogger<MainWindow>>()
+            ));
+
+            // 註冊 Home 頁面
+            services.AddSingleton<Home>(provider => new Home(
+                provider,
+                provider.GetRequiredService<ILogger<Home>>()
+            ));
         }
-
 
         protected override void OnExit(ExitEventArgs e)
         {

@@ -8,7 +8,7 @@ namespace SANJET.Core.Services
     {
         private string _dbPath;
         private bool _isInitialized;
-        private bool _shouldInsertTestData = false;
+        private readonly bool _shouldInsertTestData = false;
 
         public SqliteDataService(bool insertTestData = false)
         {
@@ -31,7 +31,7 @@ namespace SANJET.Core.Services
             }
         }
 
-        public bool IsPathAccessible(string path)
+        public static bool IsPathAccessible(string path)
         {
             try
             {
@@ -43,7 +43,13 @@ namespace SANJET.Core.Services
                     try
                     {
                         // 嘗試訪問目錄並檢查檔案是否存在
-                        string directory = System.IO.Path.GetDirectoryName(path);
+                        string? directory = System.IO.Path.GetDirectoryName(path);
+                        if (string.IsNullOrEmpty(directory))
+                        {
+                            Debug.WriteLine($"Directory is null or empty for path: {path}");
+                            return false;
+                        }
+
                         if (!System.IO.Directory.Exists(directory))
                         {
                             Debug.WriteLine($"Directory does not exist: {directory}");
@@ -107,23 +113,22 @@ namespace SANJET.Core.Services
             try
             {
                 Debug.WriteLine($"Initializing database at: {_dbPath}");
-                using (var connection = new SqliteConnection($"Data Source={_dbPath}"))
-                {
-                    connection.Open();
-                    var command = connection.CreateCommand();
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                connection.Open();
+                var command = connection.CreateCommand();
 
-                    // 創建 Users 表
-                    command.CommandText = @"
+                // 創建 Users 表
+                command.CommandText = @"
                         CREATE TABLE IF NOT EXISTS Users (
                             Username TEXT PRIMARY KEY,
                             Password TEXT NOT NULL,
                             Permissions TEXT
                         )";
-                    command.ExecuteNonQuery();
-                    //command.Parameters.Clear(); // <--- 清除參數
+                command.ExecuteNonQuery();
+                //command.Parameters.Clear(); // <--- 清除參數
 
-                    // 創建 DeviceData 表
-                    command.CommandText = @"
+                // 創建 DeviceData 表
+                command.CommandText = @"
                         CREATE TABLE IF NOT EXISTS DeviceData (
                             Id INTEGER PRIMARY KEY AUTOINCREMENT,
                             Name TEXT NOT NULL,
@@ -133,12 +138,12 @@ namespace SANJET.Core.Services
                             RunCount INTEGER NOT NULL,
                             Timestamp TEXT NOT NULL
                         )";
-                    command.ExecuteNonQuery();
+                command.ExecuteNonQuery();
 
-                    // 為每個設備創建單獨的記錄表
-                    for (int i = 1; i <= 12; i++)
-                    {
-                        command.CommandText = $@"
+                // 為每個設備創建單獨的記錄表
+                for (int i = 1; i <= 12; i++)
+                {
+                    command.CommandText = $@"
                             CREATE TABLE IF NOT EXISTS DeviceRecords_{i} (
                                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 DeviceName TEXT NOT NULL,
@@ -147,36 +152,35 @@ namespace SANJET.Core.Services
                                 Content TEXT NOT NULL,
                                 Timestamp TEXT NOT NULL
                             )";
-                        command.ExecuteNonQuery();
-                    }
+                    command.ExecuteNonQuery();
+                }
 
-                    // 檢查並添加 Timestamp 欄位（如果不存在）
-                    bool hasTimestamp = false;
-                    command = connection.CreateCommand();
-                    command.CommandText = "PRAGMA table_info(DeviceData)";
-                    using (var reader = command.ExecuteReader())
+                // 檢查並添加 Timestamp 欄位（如果不存在）
+                bool hasTimestamp = false;
+                command = connection.CreateCommand();
+                command.CommandText = "PRAGMA table_info(DeviceData)";
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
                     {
-                        while (reader.Read())
+                        if (reader["name"].ToString() == "Timestamp")
                         {
-                            if (reader["name"].ToString() == "Timestamp")
-                            {
-                                hasTimestamp = true;
-                                break;
-                            }
+                            hasTimestamp = true;
+                            break;
                         }
                     }
-
-                    if (!hasTimestamp)
-                    {
-                        command = connection.CreateCommand();
-                        command.CommandText = "ALTER TABLE DeviceData ADD COLUMN Timestamp TEXT";
-                        command.ExecuteNonQuery();
-                        Debug.WriteLine("Added Timestamp column to DeviceData table.");
-                    }
-
-                    _isInitialized = true;
-                    Debug.WriteLine("Database initialized successfully.");
                 }
+
+                if (!hasTimestamp)
+                {
+                    command = connection.CreateCommand();
+                    command.CommandText = "ALTER TABLE DeviceData ADD COLUMN Timestamp TEXT";
+                    command.ExecuteNonQuery();
+                    Debug.WriteLine("Added Timestamp column to DeviceData table.");
+                }
+
+                _isInitialized = true;
+                Debug.WriteLine("Database initialized successfully.");
             }
             catch (Exception ex)
             {
@@ -189,46 +193,44 @@ namespace SANJET.Core.Services
         {
             try
             {
-                using (var connection = new SqliteConnection($"Data Source={_dbPath}"))
-                {
-                    connection.Open();
-                    var command = connection.CreateCommand();
-                    command.CommandText = "SELECT COUNT(*) FROM Users";
-                    int userCount = Convert.ToInt32(command.ExecuteScalar());
-                    Debug.WriteLine($"Users table has {userCount} records.");
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                connection.Open();
+                var command = connection.CreateCommand();
+                command.CommandText = "SELECT COUNT(*) FROM Users";
+                int userCount = Convert.ToInt32(command.ExecuteScalar());
+                Debug.WriteLine($"Users table has {userCount} records.");
 
-                    if (userCount == 0)
-                    {
-                        command.CommandText = @"
+                if (userCount == 0)
+                {
+                    command.CommandText = @"
                             INSERT INTO Users (Username, Password, Permissions)
                             VALUES (@username, @password, @permissions)";
 
-                        command.Parameters.AddWithValue("@username", "administrator");
-                        command.Parameters.AddWithValue("@password", "sanjet25653819");
-                        command.Parameters.
-                            AddWithValue("@permissions","ViewHome,ViewManualOperation,ViewMonitor,ViewWarning,ViewSettings,ControlDevice,All");
-                        command.ExecuteNonQuery();
-                        command.Parameters.Clear(); // <--- 清除參數
+                    command.Parameters.AddWithValue("@username", "administrator");
+                    command.Parameters.AddWithValue("@password", "sanjet25653819");
+                    command.Parameters.
+                        AddWithValue("@permissions", "ViewHome,ViewManualOperation,ViewMonitor,ViewWarning,ViewSettings,ControlDevice,All");
+                    command.ExecuteNonQuery();
+                    command.Parameters.Clear(); // <--- 清除參數
 
-                        command.Parameters.AddWithValue("@username", "admin");
-                        command.Parameters.AddWithValue("@password", "0000");
-                        command.Parameters.
-                            AddWithValue("@permissions", "ViewHome,ControlDevice");
-                        command.ExecuteNonQuery();
-                        command.Parameters.Clear(); // <--- 清除參數
+                    command.Parameters.AddWithValue("@username", "admin");
+                    command.Parameters.AddWithValue("@password", "0000");
+                    command.Parameters.
+                        AddWithValue("@permissions", "ViewHome,ControlDevice");
+                    command.ExecuteNonQuery();
+                    command.Parameters.Clear(); // <--- 清除參數
 
-                        command.Parameters.Clear();
-                        command.Parameters.AddWithValue("@username", "user");
-                        command.Parameters.AddWithValue("@password", "0000");
-                        command.Parameters.AddWithValue("@permissions", "ViewHome");
-                        command.ExecuteNonQuery();
+                    command.Parameters.Clear();
+                    command.Parameters.AddWithValue("@username", "user");
+                    command.Parameters.AddWithValue("@password", "0000");
+                    command.Parameters.AddWithValue("@permissions", "ViewHome");
+                    command.ExecuteNonQuery();
 
-                        Debug.WriteLine("Test data inserted successfully because Users table was empty.");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("Skipped inserting test data because Users table is not empty.");
-                    }
+                    Debug.WriteLine("Test data inserted successfully because Users table was empty.");
+                }
+                else
+                {
+                    Debug.WriteLine("Skipped inserting test data because Users table is not empty.");
                 }
             }
             catch (Exception ex)
@@ -238,35 +240,31 @@ namespace SANJET.Core.Services
             }
         }
 
-        public User GetUserWithPermissions(string username, string password)
+        public User? GetUserWithPermissions(string username, string password)
         {
             try
             {
                 Debug.WriteLine($"Querying database for user: {username}");
-                using (var connection = new SqliteConnection($"Data Source={_dbPath}"))
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                connection.Open();
+                var command = connection.CreateCommand();
+                command.CommandText = "SELECT * FROM Users WHERE Username = @username AND Password = @password";
+                command.Parameters.AddWithValue("@username", username);
+                command.Parameters.AddWithValue("@password", password);
+                using var reader = command.ExecuteReader();
+                if (reader.Read())
                 {
-                    connection.Open();
-                    var command = connection.CreateCommand();
-                    command.CommandText = "SELECT * FROM Users WHERE Username = @username AND Password = @password";
-                    command.Parameters.AddWithValue("@username", username);
-                    command.Parameters.AddWithValue("@password", password);
-                    using (var reader = command.ExecuteReader())
+                    var user = new User
                     {
-                        if (reader.Read())
-                        {
-                            var user = new User
-                            {
-                                Username = reader["Username"].ToString(),
-                                Password = reader["Password"].ToString(),
-                                Permissions = reader["Permissions"]?.ToString()?.Split(',')?.ToList() ?? new List<string>()
-                            };
-                            Debug.WriteLine($"User found: {user.Username}, Permissions: {string.Join(",", user.Permissions)}");
-                            return user;
-                        }
-                        Debug.WriteLine($"No user found for username: {username}");
-                        return null;
-                    }
+                        Username = reader["Username"].ToString() ?? string.Empty,
+                        Password = reader["Password"].ToString() ?? string.Empty,
+                        Permissions = reader["Permissions"]?.ToString()?.Split(',')?.ToList() ?? new List<string>()
+                    };
+                    Debug.WriteLine($"User found: {user.Username}, Permissions: {string.Join(",", user.Permissions)}");
+                    return user;
                 }
+                Debug.WriteLine($"No user found for username: {username}");
+                return null;
             }
             catch (Exception ex)
             {
@@ -286,24 +284,23 @@ namespace SANJET.Core.Services
                     connection.Open();
                     var command = connection.CreateCommand();
                     command.CommandText = "SELECT * FROM DeviceData";
-                    using (var reader = command.ExecuteReader())
+                    using var reader = command.ExecuteReader();
+                    while (reader.Read())
                     {
-                        while (reader.Read())
+                        deviceDataList.Add(new DeviceData
                         {
-                            deviceDataList.Add(new DeviceData
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                Name = reader["Name"].ToString(),
-                                IpAddress = reader["IpAddress"].ToString(),
-                                SlaveId = Convert.ToInt32(reader["SlaveId"]),
-                                IsOperational = Convert.ToBoolean(reader["IsOperational"]),
-                                RunCount = Convert.ToInt32(reader["RunCount"]),
-                                // 讀取時
-                                Timestamp = reader.IsDBNull(reader.GetOrdinal("Timestamp")) 
-                                ? DateTime.MinValue
-                                : DateTime.ParseExact(reader["Timestamp"].ToString(), "o", System.Globalization.CultureInfo.InvariantCulture)
-                            });
-                        }
+                            Id = Convert.ToInt32(reader["Id"]),
+                            Name = reader["Name"].ToString() ?? string.Empty,
+                            IpAddress = reader["IpAddress"].ToString() ?? string.Empty,
+                            SlaveId = Convert.ToInt32(reader["SlaveId"]),
+                            IsOperational = Convert.ToBoolean(reader["IsOperational"]),
+                            RunCount = Convert.ToInt32(reader["RunCount"]),
+                            // 讀取時
+                            Timestamp = reader.IsDBNull(reader.GetOrdinal("Timestamp"))
+                            ? DateTime.MinValue
+                            : DateTime.ParseExact(reader["Timestamp"].ToString()
+                            ?? DateTime.MinValue.ToString("o"), "o", System.Globalization.CultureInfo.InvariantCulture)
+                        });
                     }
                 }
                 Debug.WriteLine($"Found {deviceDataList.Count} device data records.");
@@ -335,12 +332,14 @@ namespace SANJET.Core.Services
                             deviceDataList.Add(new DeviceData
                             {
                                 Id = Convert.ToInt32(reader["Id"]),
-                                Name = reader["Name"].ToString(),
-                                IpAddress = reader["IpAddress"].ToString(),
+                                Name = reader["Name"].ToString() ?? string.Empty,
+                                IpAddress = reader["IpAddress"].ToString() ?? string.Empty,
                                 SlaveId = Convert.ToInt32(reader["SlaveId"]),
                                 IsOperational = Convert.ToBoolean(reader["IsOperational"]),
                                 RunCount = Convert.ToInt32(reader["RunCount"]),
-                                Timestamp = reader.IsDBNull(reader.GetOrdinal("Timestamp")) ? DateTime.MinValue : DateTime.Parse(reader["Timestamp"].ToString())
+                                Timestamp = reader.IsDBNull(reader.GetOrdinal("Timestamp"))
+                                    ? DateTime.MinValue
+                                    : DateTime.Parse(reader["Timestamp"].ToString() ?? DateTime.MinValue.ToString())
                             });
                         }
                     }
@@ -360,23 +359,21 @@ namespace SANJET.Core.Services
             try
             {
                 Debug.WriteLine($"Saving device data for device: {name}");
-                using (var connection = new SqliteConnection($"Data Source={_dbPath}"))
-                {
-                    connection.Open();
-                    var command = connection.CreateCommand();
-                    command.CommandText = @"
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                connection.Open();
+                var command = connection.CreateCommand();
+                command.CommandText = @"
                         INSERT OR REPLACE INTO DeviceData (Id, Name, IpAddress, SlaveId, IsOperational, RunCount, Timestamp)
                         VALUES (@id, @name, @ipAddress, @slaveId, @isOperational, @runCount, @timestamp)";
-                    command.Parameters.AddWithValue("@id", deviceIndex + 1);
-                    command.Parameters.AddWithValue("@name", name);
-                    command.Parameters.AddWithValue("@ipAddress", ipAddress);
-                    command.Parameters.AddWithValue("@slaveId", slaveId);
-                    command.Parameters.AddWithValue("@isOperational", isOperational ? 1 : 0);
-                    command.Parameters.AddWithValue("@runCount", runCount);
-                    command.Parameters.AddWithValue("@timestamp", DateTime.Now.ToString("o"));
-                    command.ExecuteNonQuery();
-                    Debug.WriteLine("Device data saved successfully.");
-                }
+                command.Parameters.AddWithValue("@id", deviceIndex + 1);
+                command.Parameters.AddWithValue("@name", name);
+                command.Parameters.AddWithValue("@ipAddress", ipAddress);
+                command.Parameters.AddWithValue("@slaveId", slaveId);
+                command.Parameters.AddWithValue("@isOperational", isOperational ? 1 : 0);
+                command.Parameters.AddWithValue("@runCount", runCount);
+                command.Parameters.AddWithValue("@timestamp", DateTime.Now.ToString("o"));
+                command.ExecuteNonQuery();
+                Debug.WriteLine("Device data saved successfully.");
             }
             catch (Exception ex)
             {
@@ -396,7 +393,7 @@ namespace SANJET.Core.Services
                     var command = connection.CreateCommand();
                     command.CommandText = "SELECT COUNT(*) FROM DeviceData WHERE Id = @id";
                     command.Parameters.AddWithValue("@id", deviceId);
-                    var count = (long)command.ExecuteScalar();
+                    var count = command.ExecuteScalar() as long? ?? 0;
                     Debug.WriteLine($"DeviceExists: DeviceId={deviceId}, Exists={count > 0}");
                     return count > 0;
                 }
@@ -467,11 +464,12 @@ namespace SANJET.Core.Services
                             {
                                 Id = Convert.ToInt32(reader["Id"]),
                                 DeviceId = deviceId, // 手動設置 DeviceId
-                                DeviceName = reader["DeviceName"].ToString(),
-                                Username = reader["Username"].ToString(),
+                                DeviceName = reader["DeviceName"].ToString() ?? string.Empty,
+                                Username = reader["Username"].ToString() ?? string.Empty,
                                 RunCount = Convert.ToInt32(reader["RunCount"]),
-                                Content = reader["Content"].ToString(),
-                                Timestamp = DateTime.ParseExact(reader["Timestamp"].ToString(), "o", System.Globalization.CultureInfo.InvariantCulture)
+                                Content = reader["Content"].ToString() ?? string.Empty,
+                                Timestamp = DateTime.ParseExact(reader["Timestamp"].ToString() 
+                                ?? DateTime.MinValue.ToString("o"), "o", System.Globalization.CultureInfo.InvariantCulture)
                             });
                         }
                     }
@@ -508,11 +506,12 @@ namespace SANJET.Core.Services
                                 {
                                     Id = Convert.ToInt32(reader["Id"]),
                                     DeviceId = deviceId,
-                                    DeviceName = reader["DeviceName"].ToString(),
-                                    Username = reader["Username"].ToString(),
+                                    DeviceName = reader["DeviceName"].ToString() ?? string.Empty,
+                                    Username = reader["Username"].ToString() ?? string.Empty,
                                     RunCount = Convert.ToInt32(reader["RunCount"]),
-                                    Content = reader["Content"].ToString(),
-                                    Timestamp = DateTime.ParseExact(reader["Timestamp"].ToString(), "o", System.Globalization.CultureInfo.InvariantCulture)
+                                    Content = reader["Content"].ToString() ?? string.Empty,
+                                    Timestamp = DateTime.ParseExact(reader["Timestamp"].ToString() 
+                                    ?? DateTime.MinValue.ToString("o"), "o", System.Globalization.CultureInfo.InvariantCulture)
                                 });
                             }
                         }
